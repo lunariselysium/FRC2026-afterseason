@@ -6,6 +6,7 @@ package frc.robot.subsystems;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.function.Supplier;
 
 import org.photonvision.EstimatedRobotPose;
@@ -17,7 +18,6 @@ import org.photonvision.targeting.PhotonTrackedTarget;
 
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.math.Matrix;
-import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation3d;
@@ -26,8 +26,11 @@ import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.util.Units;
+import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.Constants.ScoringConstants;
 import frc.robot.Constants.VisionConstants;
 
 public class Vision extends SubsystemBase {
@@ -38,10 +41,8 @@ public class Vision extends SubsystemBase {
     private final Turret turret;
 
     private final VisionCamera[] cameras;
-    private boolean turretVisualServoHasTarget;
-    private double turretVisualServoYawDegrees;
-    private double turretVisualServoCorrectionDegrees;
-    private double turretVisualServoTargetHeadingDegrees;
+    private final HubYawObservation blueHubYaw = new HubYawObservation();
+    private final HubYawObservation redHubYaw = new HubYawObservation();
 
     public Vision(CommandSwerveDrivetrain drivetrain, Turret turret) {
         this.drivetrain = drivetrain;
@@ -75,12 +76,16 @@ public class Vision extends SubsystemBase {
         };
     }
 
+    public OptionalDouble getTurretForwardHubYawDegrees(Alliance alliance) {
+        return getHubYawObservation(alliance).getYawDegreesIfFresh();
+    }
+
     public void updateControlAndTelemetry() {
         for (VisionCamera camera : cameras) {
             processCamera(camera);
             publishCameraTelemetry(camera);
         }
-        publishTurretVisualServoTelemetry();
+        publishTurretForwardHubYawTelemetry();
     }
 
     private Transform3d getRobotToTurretForwardCamera() {
@@ -105,7 +110,7 @@ public class Vision extends SubsystemBase {
 
         for (PhotonPipelineResult result : camera.photonCamera.getAllUnreadResults()) {
             updateTargetTelemetry(camera, result);
-            updateTurretVisualServo(camera, result);
+            updateTurretForwardHubYaw(camera, result);
 
             Optional<EstimatedRobotPose> estimatedPose = camera.poseEstimator.update(result);
             if (estimatedPose.isEmpty()) {
@@ -146,52 +151,31 @@ public class Vision extends SubsystemBase {
         }
     }
 
-    private void updateTurretVisualServo(VisionCamera camera, PhotonPipelineResult result) {
-        if (!VisionConstants.kEnableTurretVisualServo
-            || !camera.name.equals(VisionConstants.kTurretForwardCameraName)) {
+    private void updateTurretForwardHubYaw(VisionCamera camera, PhotonPipelineResult result) {
+        if (!camera.name.equals(VisionConstants.kTurretForwardCameraName)) {
             return;
         }
 
-        Optional<PhotonTrackedTarget> target = getTargetByFiducialId(
-            result,
-            VisionConstants.kTurretVisualServoTagId
-        );
-
-        if (target.isEmpty()) {
-            turretVisualServoHasTarget = false;
-            turretVisualServoYawDegrees = 0.0;
-            turretVisualServoCorrectionDegrees = 0.0;
-            return;
-        }
-
-        double yawDegrees = target.get().getYaw();
-        double correctionDegrees = 0.0;
-        if (Math.abs(yawDegrees) > VisionConstants.kTurretVisualServoToleranceDegrees) {
-            correctionDegrees = MathUtil.clamp(
-                VisionConstants.kTurretVisualServoYawSign
-                    * VisionConstants.kTurretVisualServoYawGain
-                    * yawDegrees,
-                -VisionConstants.kTurretVisualServoMaxCorrectionDegrees,
-                VisionConstants.kTurretVisualServoMaxCorrectionDegrees
-            );
-        }
-
-        double targetHeadingDegrees = turret.getHeadingDegrees() + correctionDegrees;
-        turret.setTargetHeadingDegrees(targetHeadingDegrees);
-
-        turretVisualServoHasTarget = true;
-        turretVisualServoYawDegrees = yawDegrees;
-        turretVisualServoCorrectionDegrees = correctionDegrees;
-        turretVisualServoTargetHeadingDegrees = targetHeadingDegrees;
+        updateHubYawObservation(blueHubYaw, result, ScoringConstants.kBlueHubTagIds);
+        updateHubYawObservation(redHubYaw, result, ScoringConstants.kRedHubTagIds);
     }
 
-    private Optional<PhotonTrackedTarget> getTargetByFiducialId(
+    private void updateHubYawObservation(
+        HubYawObservation observation,
         PhotonPipelineResult result,
-        int fiducialId
+        int[] fiducialIds
+    ) {
+        Optional<PhotonTrackedTarget> target = getTargetByFiducialIds(result, fiducialIds);
+        target.ifPresent(observation::update);
+    }
+
+    private Optional<PhotonTrackedTarget> getTargetByFiducialIds(
+        PhotonPipelineResult result,
+        int[] fiducialIds
     ) {
         PhotonTrackedTarget bestTarget = null;
         for (PhotonTrackedTarget target : result.getTargets()) {
-            if (target.getFiducialId() != fiducialId) {
+            if (!containsFiducialId(fiducialIds, target.getFiducialId())) {
                 continue;
             }
 
@@ -202,6 +186,16 @@ public class Vision extends SubsystemBase {
         }
 
         return Optional.ofNullable(bestTarget);
+    }
+
+    private boolean containsFiducialId(int[] fiducialIds, int fiducialId) {
+        for (int expectedFiducialId : fiducialIds) {
+            if (expectedFiducialId == fiducialId) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void updateTargetTelemetry(VisionCamera camera, PhotonPipelineResult result) {
@@ -303,27 +297,19 @@ public class Vision extends SubsystemBase {
         SmartDashboard.putNumber(dashboardKey + "/FusedPoseCount", camera.fusedPoseCount);
     }
 
-    private void publishTurretVisualServoTelemetry() {
-        SmartDashboard.putBoolean(
-            "Vision/TurretVisualServo/Enabled",
-            VisionConstants.kEnableTurretVisualServo
-        );
-        SmartDashboard.putBoolean(
-            "Vision/TurretVisualServo/HasTarget",
-            turretVisualServoHasTarget
-        );
-        SmartDashboard.putNumber(
-            "Vision/TurretVisualServo/YawDegrees",
-            turretVisualServoYawDegrees
-        );
-        SmartDashboard.putNumber(
-            "Vision/TurretVisualServo/CorrectionDegrees",
-            turretVisualServoCorrectionDegrees
-        );
-        SmartDashboard.putNumber(
-            "Vision/TurretVisualServo/TargetHeadingDegrees",
-            turretVisualServoTargetHeadingDegrees
-        );
+    private HubYawObservation getHubYawObservation(Alliance alliance) {
+        return alliance == Alliance.Red ? redHubYaw : blueHubYaw;
+    }
+
+    private void publishTurretForwardHubYawTelemetry() {
+        publishHubYawTelemetry("Vision/TurretForwardHubYaw/Blue", blueHubYaw);
+        publishHubYawTelemetry("Vision/TurretForwardHubYaw/Red", redHubYaw);
+    }
+
+    private void publishHubYawTelemetry(String dashboardKey, HubYawObservation observation) {
+        SmartDashboard.putBoolean(dashboardKey + "/HasTarget", observation.hasFreshTarget());
+        SmartDashboard.putNumber(dashboardKey + "/YawDegrees", observation.yawDegrees);
+        SmartDashboard.putNumber(dashboardKey + "/TagId", observation.tagId);
     }
 
     private static final class VisionCamera {
@@ -361,6 +347,34 @@ public class Vision extends SubsystemBase {
                 robotToCameraSupplier.get()
             );
             poseEstimator.setMultiTagFallbackStrategy(PoseStrategy.LOWEST_AMBIGUITY);
+        }
+    }
+
+    private static final class HubYawObservation {
+        private boolean hasTarget;
+        private double yawDegrees;
+        private int tagId = -1;
+        private double timestampSeconds = -1.0;
+
+        private void update(PhotonTrackedTarget target) {
+            hasTarget = true;
+            yawDegrees = target.getYaw();
+            tagId = target.getFiducialId();
+            timestampSeconds = Timer.getFPGATimestamp();
+        }
+
+        private OptionalDouble getYawDegreesIfFresh() {
+            if (!hasFreshTarget()) {
+                return OptionalDouble.empty();
+            }
+
+            return OptionalDouble.of(yawDegrees);
+        }
+
+        private boolean hasFreshTarget() {
+            return hasTarget
+                && Timer.getFPGATimestamp() - timestampSeconds
+                    <= ScoringConstants.kHubVisualYawStaleSeconds;
         }
     }
 }

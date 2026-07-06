@@ -5,6 +5,7 @@
 package frc.robot;
 
 import edu.wpi.first.apriltag.AprilTagFields;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.math.geometry.Translation3d;
@@ -96,13 +97,6 @@ public final class Constants {
         public static final double kTurretHeadingToRobotYawSign = 1.0;
         public static final double kTurretForwardCameraZeroYawOffsetDegrees = 0.0;
 
-        public static final boolean kEnableTurretVisualServo = true;
-        public static final int kTurretVisualServoTagId = 8;
-        public static final double kTurretVisualServoYawSign = -1.0;
-        public static final double kTurretVisualServoYawGain = 0.60;
-        public static final double kTurretVisualServoToleranceDegrees = 1.0;
-        public static final double kTurretVisualServoMaxCorrectionDegrees = 8.0;
-
         public static final double kMaxAcceptedPoseZErrorMeters = 0.35;
         public static final double kAcceptedFieldBoundaryMarginMeters = 0.75;
         public static final double kMaxSingleTagAmbiguity = 0.20;
@@ -128,6 +122,83 @@ public final class Constants {
         private static double fromRightMillimeters(double millimetersFromRight) {
             return -kDrivetrainWidthMeters / 2.0 + millimetersToMeters(millimetersFromRight);
         }
+    }
+
+    public static final class ScoringConstants {
+        private ScoringConstants() {}
+
+        public record ShotMapPoint(
+            double distanceMeters,
+            double pitchDegrees,
+            double flywheelRotationsPerSecond
+        ) {}
+
+        public static final double kFieldLengthMeters = 16.518;
+        public static final double kFieldWidthMeters = 8.043;
+
+        public static final Translation2d kBlueHubCenterMeters =
+            new Translation2d(4.52265415, 4.0213534);
+        public static final Translation2d kRedHubCenterMeters =
+            new Translation2d(11.9903494, 4.0213534);
+
+        public static final int[] kBlueHubTagIds = {18, 19, 20, 21, 24, 25, 26, 27};
+        public static final int[] kRedHubTagIds = {2, 3, 4, 5, 8, 9, 10, 11};
+
+        public static final double kAllianceZoneDepthMeters = Units.inchesToMeters(182.11);
+        public static final double kPassTargetInsetIntoAllianceZoneMeters = Units.inchesToMeters(12.0);
+        public static final double kPassTargetYOffsetFromFieldCenterMeters = Units.inchesToMeters(47.0);
+
+        public static final double kBluePassTargetXMeters =
+            kAllianceZoneDepthMeters - kPassTargetInsetIntoAllianceZoneMeters;
+        public static final double kRedPassTargetXMeters =
+            kFieldLengthMeters - kAllianceZoneDepthMeters + kPassTargetInsetIntoAllianceZoneMeters;
+        public static final Translation2d kBlueLowerPassTargetMeters =
+            new Translation2d(
+                kBluePassTargetXMeters,
+                kFieldWidthMeters / 2.0 - kPassTargetYOffsetFromFieldCenterMeters
+            );
+        public static final Translation2d kBlueUpperPassTargetMeters =
+            new Translation2d(
+                kBluePassTargetXMeters,
+                kFieldWidthMeters / 2.0 + kPassTargetYOffsetFromFieldCenterMeters
+            );
+        public static final Translation2d kRedLowerPassTargetMeters =
+            new Translation2d(
+                kRedPassTargetXMeters,
+                kFieldWidthMeters / 2.0 - kPassTargetYOffsetFromFieldCenterMeters
+            );
+        public static final Translation2d kRedUpperPassTargetMeters =
+            new Translation2d(
+                kRedPassTargetXMeters,
+                kFieldWidthMeters / 2.0 + kPassTargetYOffsetFromFieldCenterMeters
+            );
+
+        public static final double kHubVisualTrimYawSign = -1.0;
+        public static final double kHubVisualTrimYawGain = 0.60;
+        public static final double kHubVisualTrimToleranceDegrees = 1.0;
+        public static final double kHubVisualTrimMaxCorrectionDegrees = 8.0;
+        public static final double kHubVisualYawStaleSeconds = 0.25;
+
+        public static final int kReadyDebounceCycles = 5;
+
+        public static final double kMinShotPitchDegrees = TurretPitchConstants.kMinPitchDegrees;
+        public static final double kMaxShotPitchDegrees = TurretPitchConstants.kMaxPitchDegrees;
+        public static final double kMinShotFlywheelRotationsPerSecond = 20.0;
+        public static final double kMaxShotFlywheelRotationsPerSecond = 45.0;
+
+        // Provisional maps only. Replace these rows with measured shots during calibration.
+        public static final ShotMapPoint[] kHubShotMap = {
+            new ShotMapPoint(1.50, 18.0, 31.0),
+            new ShotMapPoint(2.50, 24.0, 33.0),
+            new ShotMapPoint(3.50, 30.0, 35.0),
+            new ShotMapPoint(4.50, 35.0, 37.0),
+        };
+        public static final ShotMapPoint[] kPassShotMap = {
+            new ShotMapPoint(3.00, 16.0, 30.0),
+            new ShotMapPoint(5.00, 22.0, 34.0),
+            new ShotMapPoint(7.00, 28.0, 38.0),
+            new ShotMapPoint(9.00, 34.0, 42.0),
+        };
     }
 
     public static final class MusicConstants {
@@ -202,20 +273,24 @@ public final class Constants {
         // Flip this if positive Kraken encoder motion reports turret heading backwards.
         public static final double kHeadingMotorPositionSign = -1.0;
 
-        public static final double kMinTurretHeadingDegrees = -270.0;
-        public static final double kMaxTurretHeadingDegrees = 140.0;
+        public static final double kMinTurretHeadingDegrees = -390.0;
+        public static final double kMaxTurretHeadingDegrees = 150.0;
         public static final double kTurretHeadingWrapDegrees = 360.0;
         public static final double kHeadingEncoderStartupGraceSeconds = 1.0;
 
-        public static final double kTargetHeadingStepDegrees = 10.0;
+        public static final double kTargetHeadingStepDegrees = 30.0;
         public static final double kHeadingToleranceDegrees = 1.0;
-        public static final double kMaxTurretHeadingVelocityDegreesPerSecond = 25.0;
-        public static final double kMaxTurretHeadingAccelerationDegreesPerSecondSquared = 80.0;
-        public static final double kTurretHeadingKp = 0.0025;
+        public static final double kMaxTurretHeadingVelocityDegreesPerSecond = 600.0;
+        public static final double kMaxTurretHeadingAccelerationDegreesPerSecondSquared = 1000.0;
+        public static final double kTurretHeadingKp = 0.0044;
         public static final double kTurretHeadingKv = 0.0010;
-        public static final double kMaxTurretMotorOutput = 0.07;
+        public static final double kTurretHeadingKs = 0.015;
+        public static final double kMaxTurretMotorOutput = 0.7;
         public static final double kTurretHeadingSupplyCurrentLimitAmps = 10.0;
         public static final double kTurretHeadingStatorCurrentLimitAmps = 20.0;
+        public static final double kSysIdQuasistaticRampRateVoltsPerSecond = 0.25;
+        public static final double kSysIdDynamicStepVolts = 1.50;
+        public static final double kSysIdTimeoutSeconds = 10.0;
 
         // Flip this if the turret moves away from the target heading.
         public static final double kHeadingMotorOutputSign = -1.0;
@@ -250,23 +325,27 @@ public final class Constants {
 
         public static final double kMinPitchDegrees = 0.0;
         public static final double kMaxPitchDegrees = 35.0;
-        public static final double kTargetPitchStepDegrees = 5.0;
-        public static final double kPitchToleranceDegrees = 1.0;
+        public static final double kTargetPitchStepDegrees = 35.0;
+        public static final double kPitchToleranceDegrees = 0.5;
 
-        public static final double kMaxPitchVelocityDegreesPerSecond = 15.0;
-        public static final double kMaxPitchAccelerationDegreesPerSecondSquared = 50.0;
-        public static final double kPitchKp = 0.006;
-        public static final double kPitchKv = 0.001;
-        public static final double kPitchKg = 0.0;
+        public static final double kMaxPitchVelocityDegreesPerSecond = 600.0;
+        public static final double kMaxPitchAccelerationDegreesPerSecondSquared = 1000.0;
+        public static final double kPitchKp = 0.038;
+        public static final double kPitchKv = 0.0012;
+        public static final double kPitchKg = 0.002;
         public static final double kPitchGravityOffsetDegrees = 0.0;
-        public static final double kMaxPitchMotorOutput = 0.06;
+        public static final double kMaxPitchMotorOutput = 0.80;
 
         public static final double kPitchSupplyCurrentLimitAmps = 20.0;
         public static final double kPitchStatorCurrentLimitAmps = 30.0;
         public static final double kPitchHomingMotorOutput = 0.04;
-        public static final double kPitchHomingCurrentThresholdAmps = 10.0;
+        public static final double kPitchHomingCurrentThresholdAmps = 8.0;
         public static final double kPitchHomingMinRunTimeSeconds = 0.25;
         public static final double kPitchHomingCurrentDebounceSeconds = 0.10;
+        public static final double kPitchHomingTimeoutSeconds = 10.0;
+        public static final double kSysIdQuasistaticRampRateVoltsPerSecond = 0.20;
+        public static final double kSysIdDynamicStepVolts = 2.00;
+        public static final double kSysIdTimeoutSeconds = 10.0;
 
         // Flip if positive motor rotations report pitch downward.
         public static final double kPitchPositionSign = 1.0;
@@ -284,11 +363,17 @@ public final class Constants {
 
         public static final double kTargetVelocityRotationsPerSecond = 35.0;
         public static final double kVelocityToleranceRotationsPerSecond = 2.0;
-        public static final double kFlywheelKp = 0.10;
-        public static final double kFlywheelKv = 0.12;
-        public static final double kFlywheelKs = 0.0;
+        public static final double kFlywheelKp = 0.15227;
+        public static final double kFlywheelKv = 0.11285;
+        public static final double kFlywheelKa = 0.0028782;
+        public static final double kFlywheelKs = 0.10952;
+        public static final double kMotionMagicAccelerationRotationsPerSecondSquared = 70.0;
+        public static final double kMotionMagicJerkRotationsPerSecondCubed = 700.0;
         public static final double kSupplyCurrentLimitAmps = 35.0;
         public static final double kStatorCurrentLimitAmps = 60.0;
+        public static final double kSysIdQuasistaticRampRateVoltsPerSecond = 0.50;
+        public static final double kSysIdDynamicStepVolts = 4.0;
+        public static final double kSysIdTimeoutSeconds = 10.0;
 
         public static final boolean kFollowerOpposesLeader = true;
     }
@@ -299,7 +384,7 @@ public final class Constants {
         public static final int kMotorCanId = 31;
         public static final String kMotorCanBus = "canivores";
 
-        public static final double kMotorOutput = 0.12;
+        public static final double kMotorOutput = 0.48;
         public static final double kMotorOutputSign = 1.0;
         public static final double kSupplyCurrentLimitAmps = 20.0;
         public static final double kStatorCurrentLimitAmps = 30.0;
@@ -315,8 +400,8 @@ public final class Constants {
         public static final String kMotorCanBus = "canivores";
 
         public static final double kFloorMotorOutput = 0.08;
-        public static final double kBeltMotorOutput = 0.08;
-        public static final double kHandoffWheelMotorOutput = 0.08;
+        public static final double kBeltMotorOutput = 0.32;
+        public static final double kHandoffWheelMotorOutput = 0.32;
 
         public static final double kFloorMotorOutputSign = 1.0;
         public static final double kBeltMotorOutputSign = 1.0;
@@ -341,8 +426,17 @@ public final class Constants {
 
         public static final double kDeployedSetpointMotorRotations = 20.8;
         public static final double kPositionToleranceMotorRotations = 0.5;
-        public static final double kPositionKp = 0.08;
-        public static final double kMaxPositionMotorOutput = 0.2;
+        public static final double kPositionClosedLoopKp = 1.2;
+        public static final double kPositionClosedLoopKd = 0.0;
+        public static final double kPositionClosedLoopKs = 0.333;
+        public static final double kPositionClosedLoopKv = 0.109;
+        public static final double kPositionClosedLoopKa = 0.006;
+        // CTRE motor-output voltage; positive retracts/stows this mechanism.
+        public static final double kStowAssistFeedForwardVolts = 0.5;
+        public static final double kMotionMagicCruiseVelocityMotorRotationsPerSecond = 36.0;
+        public static final double kMotionMagicAccelerationMotorRotationsPerSecondSquared = 72.0;
+        public static final double kDeployedHardstopCaptureCurrentThresholdAmps = 15.0;
+        public static final double kDeployedHardstopCaptureWindowMotorRotations = 1.2;
 
         // Positive mechanism position is deploying; positive raw motor position retracts.
         public static final double kDeployPositionSensorSign = -1.0;
@@ -358,6 +452,11 @@ public final class Constants {
         public static final double kHomingCurrentThresholdAmps = 25.0;
         public static final double kHomingMinRunTimeSeconds = 0.25;
         public static final double kHomingCurrentDebounceSeconds = 0.10;
+        public static final double kHomingTimeoutSeconds = 10.0;
+
+        public static final double kSysIdQuasistaticRampRateVoltsPerSecond = 0.25;
+        public static final double kSysIdDynamicStepVolts = 2.0;
+        public static final double kSysIdTimeoutSeconds = 10.0;
 
         public static final double kRollerMotorOutput = 0.1;
         public static final double kRollerMotorOutputSign = 1.0;

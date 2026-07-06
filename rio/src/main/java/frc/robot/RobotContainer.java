@@ -15,6 +15,7 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 
+import frc.robot.commands.ScoreCommand;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.robot.subsystems.Feeder;
@@ -69,11 +70,29 @@ public class RobotContainer {
             )
         );
 
-        joystick.a().onTrue(Commands.runOnce(intake::moveToStowedSetpoint, intake));
-        joystick.b().onTrue(Commands.runOnce(intake::startHoming, intake));
-        joystick.rightBumper().onTrue(Commands.runOnce(intake::moveToDeployedSetpoint, intake));
-        joystick.rightBumper().whileTrue(Commands.startEnd(intake::runRollersIn, intake::stopRollers, intake));
-        joystick.leftTrigger().whileTrue(Commands.startEnd(intake::runRollersOut, intake::stopRollers, intake));
+        joystick.a()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .onTrue(Commands.runOnce(intake::moveToStowedSetpoint, intake));
+        joystick.b()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .onTrue(Commands.runOnce(intake::startHoming, intake));
+        joystick.rightBumper()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .whileTrue(
+                Commands.startEnd(
+                    () -> {
+                        intake.moveToDeployedSetpoint();
+                        intake.runRollersIn();
+                    },
+                    intake::stopRollers,
+                    intake
+                )
+            );
+        joystick.leftTrigger()
+            .whileTrue(Commands.startEnd(turret::runFlywheel, turret::stopFlywheel, turret));
         joystick.y()
             .and(joystick.back().negate())
             .and(joystick.start().negate())
@@ -86,16 +105,50 @@ public class RobotContainer {
         joystick.start().and(joystick.y()).whileTrue(drivetrain.sysIdQuasistatic(Direction.kForward));
         joystick.start().and(joystick.x()).whileTrue(drivetrain.sysIdQuasistatic(Direction.kReverse));
 
-        joystick.povLeft().onTrue(Commands.runOnce(turret::stepTargetHeadingLeft, turret));
-        joystick.povRight().onTrue(Commands.runOnce(turret::stepTargetHeadingRight, turret));
-        joystick.povUp().onTrue(Commands.runOnce(turret::stepTargetPitchUp, turret));
-        joystick.povDown().onTrue(Commands.runOnce(turret::stepTargetPitchDown, turret));
+        // Turret SysId chords use Back for dynamic tests and Start for quasistatic tests.
+        joystick.back().and(joystick.povLeft()).whileTrue(turret.sysIdHeadingDynamic(Direction.kForward));
+        joystick.back().and(joystick.povRight()).whileTrue(turret.sysIdHeadingDynamic(Direction.kReverse));
+        joystick.start().and(joystick.povLeft()).whileTrue(turret.sysIdHeadingQuasistatic(Direction.kForward));
+        joystick.start().and(joystick.povRight()).whileTrue(turret.sysIdHeadingQuasistatic(Direction.kReverse));
+
+        joystick.back().and(joystick.povUp()).whileTrue(turret.sysIdPitchDynamic(Direction.kForward));
+        joystick.back().and(joystick.povDown()).whileTrue(turret.sysIdPitchDynamic(Direction.kReverse));
+        joystick.start().and(joystick.povUp()).whileTrue(turret.sysIdPitchQuasistatic(Direction.kForward));
+        joystick.start().and(joystick.povDown()).whileTrue(turret.sysIdPitchQuasistatic(Direction.kReverse));
+
+        joystick.back().and(joystick.b()).whileTrue(turret.sysIdFlywheelDynamic(Direction.kForward));
+        joystick.back().and(joystick.a()).whileTrue(turret.sysIdFlywheelDynamic(Direction.kReverse));
+        joystick.start().and(joystick.b()).whileTrue(turret.sysIdFlywheelQuasistatic(Direction.kForward));
+        joystick.start().and(joystick.a()).whileTrue(turret.sysIdFlywheelQuasistatic(Direction.kReverse));
+
+        joystick.povLeft()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .onTrue(Commands.runOnce(turret::stepTargetHeadingLeft));
+        joystick.povRight()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .onTrue(Commands.runOnce(turret::stepTargetHeadingRight));
+        joystick.povUp()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .onTrue(Commands.runOnce(turret::stepTargetPitchUp));
+        joystick.povDown()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .onTrue(Commands.runOnce(turret::stepTargetPitchDown));
         joystick.x()
             .and(joystick.back().negate())
             .and(joystick.start().negate())
-            .onTrue(Commands.runOnce(turret::startPitchHoming, turret));
-        joystick.rightTrigger().whileTrue(Commands.startEnd(turret::runFlywheel, turret::stopFlywheel));
-        joystick.leftBumper().whileTrue(Commands.startEnd(turret::runSerializer, turret::stopSerializer));
+            .onTrue(Commands.runOnce(turret::startPitchHoming));
+        joystick.rightTrigger()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .whileTrue(new ScoreCommand(drivetrain, turret, feeder, vision));
+        joystick.leftBumper()
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .whileTrue(Commands.startEnd(turret::runSerializer, turret::stopSerializer));
 
         drivetrain.registerTelemetry(logger::telemeterize);
     }

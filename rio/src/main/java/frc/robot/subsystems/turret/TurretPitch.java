@@ -28,10 +28,14 @@ public class TurretPitch {
     private double profiledPitchVelocityDegreesPerSecond;
     private double lastProfileUpdateTimeSeconds;
     private double appliedPitchMotorOutput;
+    private double appliedSysIdMechanismVoltage;
     private double homingStartTimestampSeconds;
     private double highCurrentStartTimestampSeconds = Double.NaN;
     private boolean homing;
     private boolean homed;
+    private boolean homingTimedOut;
+    private boolean sysIdActive;
+    private boolean reportedSysIdNotHomedWarning;
 
     public TurretPitch() {
         pitchMotor.getConfigurator().apply(
@@ -72,6 +76,21 @@ public class TurretPitch {
         return appliedPitchMotorOutput;
     }
 
+    public double getPitchVelocityDegreesPerSecond() {
+        return TurretPitchConstants.kPitchPositionSign
+            * pitchMotor.getVelocity().getValueAsDouble()
+            * TurretPitchConstants.kPitchDegreesPerMotorRotation;
+    }
+
+    public double getAppliedSysIdMechanismVoltage() {
+        return appliedSysIdMechanismVoltage;
+    }
+
+    public double getMeasuredMechanismVoltage() {
+        return TurretPitchConstants.kPitchMotorOutputSign
+            * pitchMotor.getMotorVoltage().getValueAsDouble();
+    }
+
     public double getStatorCurrentAmps() {
         return pitchMotor.getStatorCurrent().getValueAsDouble();
     }
@@ -82,6 +101,20 @@ public class TurretPitch {
 
     public boolean isHomed() {
         return homed;
+    }
+
+    public boolean didHomingTimeOut() {
+        return homingTimedOut;
+    }
+
+    public boolean isSysIdActive() {
+        return sysIdActive;
+    }
+
+    public boolean isAtTarget() {
+        return homed
+            && Math.abs(targetPitchDegrees - getPitchDegrees())
+                <= TurretPitchConstants.kPitchToleranceDegrees;
     }
 
     public void stepTargetUp() {
@@ -95,14 +128,50 @@ public class TurretPitch {
     public void startHoming() {
         homing = true;
         homed = false;
+        homingTimedOut = false;
+        sysIdActive = false;
         homingStartTimestampSeconds = Timer.getFPGATimestamp();
         highCurrentStartTimestampSeconds = Double.NaN;
+    }
+
+    public void prepareSysId() {
+        homing = false;
+        sysIdActive = false;
+        reportedSysIdNotHomedWarning = false;
+        holdCurrentPitch();
+        setMechanismVoltage(0.0);
+    }
+
+    public void runSysIdVoltage(double mechanismVoltage) {
+        if (Math.abs(mechanismVoltage) < 1.0e-6) {
+            stopSysId();
+            return;
+        }
+
+        if (!isHomed()) {
+            reportSysIdNotHomedWarningOnce();
+            stopSysId();
+            return;
+        }
+
+        homing = false;
+        sysIdActive = true;
+        setMechanismVoltage(mechanismVoltage);
+    }
+
+    public void stopSysId() {
+        sysIdActive = false;
+        holdCurrentPitch();
+        setMechanismVoltage(0.0);
     }
 
     public void updateControl() {
         if (DriverStation.isDisabled()) {
             homing = false;
+            sysIdActive = false;
             setMechanismOutput(0.0);
+        } else if (sysIdActive) {
+            homing = false;
         } else if (homing) {
             updateHomingControl();
         } else if (homed) {
@@ -110,18 +179,22 @@ public class TurretPitch {
             updatePitchController();
         } else {
             setMechanismOutput(0.0);
-            targetPitchDegrees = clampPitchToTravelWindow(getPitchDegrees());
-            profiledPitchDegrees = targetPitchDegrees;
-            profiledPitchVelocityDegreesPerSecond = 0.0;
-            lastProfileUpdateTimeSeconds = Timer.getFPGATimestamp();
+            holdCurrentPitch();
         }
     }
 
     private void updateHomingControl() {
         double nowSeconds = Timer.getFPGATimestamp();
+        double homingElapsedSeconds = nowSeconds - homingStartTimestampSeconds;
+
+        if (homingElapsedSeconds >= TurretPitchConstants.kPitchHomingTimeoutSeconds) {
+            failHomingTimeout();
+            return;
+        }
+
         setMechanismOutput(-TurretPitchConstants.kPitchHomingMotorOutput, false);
 
-        if (nowSeconds - homingStartTimestampSeconds < TurretPitchConstants.kPitchHomingMinRunTimeSeconds) {
+        if (homingElapsedSeconds < TurretPitchConstants.kPitchHomingMinRunTimeSeconds) {
             return;
         }
 
@@ -147,8 +220,33 @@ public class TurretPitch {
         }
     }
 
-    private void setTargetPitchDegrees(double requestedPitchDegrees) {
+    private void failHomingTimeout() {
+        homing = false;
+        homed = false;
+        homingTimedOut = true;
+        targetPitchDegrees = clampPitchToTravelWindow(getPitchDegrees());
+        profiledPitchDegrees = targetPitchDegrees;
+        profiledPitchVelocityDegreesPerSecond = 0.0;
+        lastProfileUpdateTimeSeconds = Timer.getFPGATimestamp();
+        setMechanismOutput(0.0);
+
+        DriverStation.reportWarning(
+            "Turret pitch homing timed out after "
+                + TurretPitchConstants.kPitchHomingTimeoutSeconds
+                + " seconds; stopping pitch motor.",
+            false
+        );
+    }
+
+    public void setTargetPitchDegrees(double requestedPitchDegrees) {
         targetPitchDegrees = clampPitchToTravelWindow(requestedPitchDegrees);
+    }
+
+    private void holdCurrentPitch() {
+        targetPitchDegrees = clampPitchToTravelWindow(getPitchDegrees());
+        profiledPitchDegrees = targetPitchDegrees;
+        profiledPitchVelocityDegreesPerSecond = 0.0;
+        lastProfileUpdateTimeSeconds = Timer.getFPGATimestamp();
     }
 
     private double clampPitchToTravelWindow(double pitchDegrees) {
@@ -242,6 +340,7 @@ public class TurretPitch {
             : mechanismOutput;
 
         appliedPitchMotorOutput = TurretPitchConstants.kPitchMotorOutputSign * safeMechanismOutput;
+        appliedSysIdMechanismVoltage = 0.0;
         pitchMotor.set(appliedPitchMotorOutput);
     }
 
@@ -257,5 +356,27 @@ public class TurretPitch {
         }
 
         return mechanismOutput;
+    }
+
+    private void setMechanismVoltage(double mechanismVoltage) {
+        double safeMechanismVoltage = applyTravelLimits(mechanismVoltage);
+
+        appliedPitchMotorOutput = 0.0;
+        appliedSysIdMechanismVoltage = safeMechanismVoltage;
+        pitchMotor.setVoltage(
+            TurretPitchConstants.kPitchMotorOutputSign * safeMechanismVoltage
+        );
+    }
+
+    private void reportSysIdNotHomedWarningOnce() {
+        if (reportedSysIdNotHomedWarning) {
+            return;
+        }
+
+        DriverStation.reportWarning(
+            "Turret pitch SysId requested before pitch homing; pitch motor will stay stopped.",
+            false
+        );
+        reportedSysIdNotHomedWarning = true;
     }
 }

@@ -1,0 +1,97 @@
+// Copyright (c) FIRST and other WPILib contributors.
+// Open Source Software; you can modify and/or share it under the terms of
+// the WPILib BSD license file in the root directory of this project.
+
+package frc.robot.subsystems.turret;
+
+final class TurretHeadingMath {
+    private static final double kEpsilon = 1.0e-9;
+
+    private TurretHeadingMath() {}
+
+    static double chooseNearestEquivalentInWindow(
+        double requestedHeadingDegrees,
+        double referenceHeadingDegrees,
+        double minHeadingDegrees,
+        double maxHeadingDegrees,
+        double wrapDegrees
+    ) {
+        if (wrapDegrees <= 0.0) {
+            return clampHeadingToTravelWindow(
+                requestedHeadingDegrees,
+                minHeadingDegrees,
+                maxHeadingDegrees
+            );
+        }
+
+        double minWraps = Math.ceil((minHeadingDegrees - requestedHeadingDegrees) / wrapDegrees);
+        double maxWraps = Math.floor((maxHeadingDegrees - requestedHeadingDegrees) / wrapDegrees);
+
+        if (minWraps > maxWraps) {
+            return clampHeadingToTravelWindow(
+                requestedHeadingDegrees,
+                minHeadingDegrees,
+                maxHeadingDegrees
+            );
+        }
+
+        double preferredWraps = Math.round(
+            (referenceHeadingDegrees - requestedHeadingDegrees) / wrapDegrees
+        );
+        double bestWraps = clamp(preferredWraps, minWraps, maxWraps);
+        double bestHeadingDegrees = requestedHeadingDegrees + bestWraps * wrapDegrees;
+
+        double lowerNeighborWraps = Math.max(minWraps, bestWraps - 1.0);
+        double upperNeighborWraps = Math.min(maxWraps, bestWraps + 1.0);
+        for (double wraps = lowerNeighborWraps; wraps <= upperNeighborWraps; wraps += 1.0) {
+            double candidateHeadingDegrees = requestedHeadingDegrees + wraps * wrapDegrees;
+            if (isBetterCandidate(
+                candidateHeadingDegrees,
+                bestHeadingDegrees,
+                requestedHeadingDegrees,
+                referenceHeadingDegrees
+            )) {
+                bestHeadingDegrees = candidateHeadingDegrees;
+            }
+        }
+
+        return clampHeadingToTravelWindow(
+            bestHeadingDegrees,
+            minHeadingDegrees,
+            maxHeadingDegrees
+        );
+    }
+
+    static double clampHeadingToTravelWindow(
+        double headingDegrees,
+        double minHeadingDegrees,
+        double maxHeadingDegrees
+    ) {
+        return clamp(headingDegrees, minHeadingDegrees, maxHeadingDegrees);
+    }
+
+    private static boolean isBetterCandidate(
+        double candidateHeadingDegrees,
+        double bestHeadingDegrees,
+        double requestedHeadingDegrees,
+        double referenceHeadingDegrees
+    ) {
+        double candidateDistance = Math.abs(candidateHeadingDegrees - referenceHeadingDegrees);
+        double bestDistance = Math.abs(bestHeadingDegrees - referenceHeadingDegrees);
+
+        if (candidateDistance < bestDistance - kEpsilon) {
+            return true;
+        }
+
+        if (Math.abs(candidateDistance - bestDistance) > kEpsilon) {
+            return false;
+        }
+
+        return Math.abs(candidateHeadingDegrees - requestedHeadingDegrees)
+            < Math.abs(bestHeadingDegrees - requestedHeadingDegrees);
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+}

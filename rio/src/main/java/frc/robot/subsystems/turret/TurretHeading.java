@@ -37,12 +37,15 @@ public class TurretHeading {
     private double startupTimestampSeconds;
     private double motorEncoderFallbackHeadingOffsetDegrees;
     private double appliedMotorOutput;
+    private double appliedSysIdMechanismVoltage;
     private boolean encoderWasPresentAtStartup;
     private boolean startupEncoderCheckComplete;
     private boolean usingMotorEncoderFallback;
     private boolean lastEncoderConnected;
+    private boolean sysIdActive;
     private boolean reportedStartupEncoderFault;
     private boolean reportedFallbackWarning;
+    private boolean reportedSysIdNotAllowedWarning;
 
     public TurretHeading() {
         headingMotor.getConfigurator().apply(
@@ -141,6 +144,36 @@ public class TurretHeading {
         return appliedMotorOutput;
     }
 
+    public double getHeadingVelocityDegreesPerSecond() {
+        return TurretConstants.kHeadingMotorPositionSign
+            * headingMotor.getVelocity().getValueAsDouble()
+            / TurretConstants.kMotorToTurretReduction
+            * 360.0;
+    }
+
+    public double getAppliedSysIdMechanismVoltage() {
+        return appliedSysIdMechanismVoltage;
+    }
+
+    public double getMeasuredMechanismVoltage() {
+        return TurretConstants.kHeadingMotorOutputSign
+            * headingMotor.getMotorVoltage().getValueAsDouble();
+    }
+
+    public double getStatorCurrentAmps() {
+        return headingMotor.getStatorCurrent().getValueAsDouble();
+    }
+
+    public boolean isSysIdActive() {
+        return sysIdActive;
+    }
+
+    public boolean isAtTarget() {
+        return isHeadingMotionAllowed()
+            && Math.abs(targetHeadingDegrees - getHeadingDegrees())
+                <= TurretConstants.kHeadingToleranceDegrees;
+    }
+
     public void stepTargetLeft() {
         setTargetHeadingDegrees(targetHeadingDegrees + TurretConstants.kTargetHeadingStepDegrees);
     }
@@ -149,13 +182,52 @@ public class TurretHeading {
         setTargetHeadingDegrees(targetHeadingDegrees - TurretConstants.kTargetHeadingStepDegrees);
     }
 
+    public void prepareSysId() {
+        holdCurrentHeading();
+        sysIdActive = false;
+        reportedSysIdNotAllowedWarning = false;
+        setMechanismVoltage(0.0);
+    }
+
+    public void runSysIdVoltage(double mechanismVoltage) {
+        if (Math.abs(mechanismVoltage) < 1.0e-6) {
+            stopSysId();
+            return;
+        }
+
+        if (!isHeadingMotionAllowed()) {
+            reportSysIdNotAllowedWarningOnce();
+            stopSysId();
+            return;
+        }
+
+        sysIdActive = true;
+        setMechanismVoltage(mechanismVoltage);
+    }
+
+    public void stopSysId() {
+        sysIdActive = false;
+        holdCurrentHeading();
+        setMechanismVoltage(0.0);
+    }
+
     public void updateControl() {
         updateHeadingMeasurement();
         updateStartupEncoderCheck();
 
+        if (DriverStation.isDisabled()) {
+            sysIdActive = false;
+            setMotorOutput(0.0);
+            return;
+        }
+
         if (!isHeadingMotionAllowed()) {
             holdCurrentHeading();
             setMotorOutput(0.0);
+            return;
+        }
+
+        if (sysIdActive) {
             return;
         }
 
@@ -279,21 +351,17 @@ public class TurretHeading {
     }
 
     private double wrapHeadingIntoTravelWindow(double headingDegrees) {
-        double wrappedHeadingDegrees = headingDegrees;
-
-        while (wrappedHeadingDegrees > TurretConstants.kMaxTurretHeadingDegrees) {
-            wrappedHeadingDegrees -= TurretConstants.kTurretHeadingWrapDegrees;
-        }
-
-        while (wrappedHeadingDegrees < TurretConstants.kMinTurretHeadingDegrees) {
-            wrappedHeadingDegrees += TurretConstants.kTurretHeadingWrapDegrees;
-        }
-
-        return clampHeadingToTravelWindow(wrappedHeadingDegrees);
+        return TurretHeadingMath.chooseNearestEquivalentInWindow(
+            headingDegrees,
+            profiledHeadingDegrees,
+            TurretConstants.kMinTurretHeadingDegrees,
+            TurretConstants.kMaxTurretHeadingDegrees,
+            TurretConstants.kTurretHeadingWrapDegrees
+        );
     }
 
     private double clampHeadingToTravelWindow(double headingDegrees) {
-        return MathUtil.clamp(
+        return TurretHeadingMath.clampHeadingToTravelWindow(
             headingDegrees,
             TurretConstants.kMinTurretHeadingDegrees,
             TurretConstants.kMaxTurretHeadingDegrees
@@ -352,23 +420,22 @@ public class TurretHeading {
     }
 
     private void updateHeadingController() {
-        if (DriverStation.isDisabled()) {
-            profiledHeadingVelocityDegreesPerSecond = 0.0;
-            setMotorOutput(0.0);
-            return;
-        }
-
         double headingErrorDegrees = getHeadingErrorDegrees();
         if (Math.abs(headingErrorDegrees) <= TurretConstants.kHeadingToleranceDegrees) {
             setMotorOutput(0.0);
             return;
         }
 
-        double motorOutput = TurretConstants.kHeadingMotorOutputSign
-            * (
-                TurretConstants.kTurretHeadingKv * profiledHeadingVelocityDegreesPerSecond
-                    + TurretConstants.kTurretHeadingKp * headingErrorDegrees
-            );
+        double staticFeedforwardDirection = Math.signum(profiledHeadingVelocityDegreesPerSecond);
+        if (staticFeedforwardDirection == 0.0) {
+            staticFeedforwardDirection = Math.signum(headingErrorDegrees);
+        }
+
+        double mechanismOutput =
+            TurretConstants.kTurretHeadingKs * staticFeedforwardDirection
+                + TurretConstants.kTurretHeadingKv * profiledHeadingVelocityDegreesPerSecond
+                + TurretConstants.kTurretHeadingKp * headingErrorDegrees;
+        double motorOutput = TurretConstants.kHeadingMotorOutputSign * mechanismOutput;
 
         setMotorOutput(
             MathUtil.clamp(
@@ -383,7 +450,18 @@ public class TurretHeading {
         double safeMotorOutput = applyTravelLimits(motorOutput);
 
         appliedMotorOutput = safeMotorOutput;
+        appliedSysIdMechanismVoltage = 0.0;
         headingMotor.set(safeMotorOutput);
+    }
+
+    private void setMechanismVoltage(double mechanismVoltage) {
+        double safeMechanismVoltage = applyVoltageTravelLimits(mechanismVoltage);
+
+        appliedMotorOutput = 0.0;
+        appliedSysIdMechanismVoltage = safeMechanismVoltage;
+        headingMotor.setVoltage(
+            TurretConstants.kHeadingMotorOutputSign * safeMechanismVoltage
+        );
     }
 
     private double applyTravelLimits(double motorOutput) {
@@ -400,6 +478,22 @@ public class TurretHeading {
         }
 
         return motorOutput;
+    }
+
+    private double applyVoltageTravelLimits(double mechanismVoltage) {
+        double currentHeadingDegrees = getHeadingDegrees();
+
+        if (currentHeadingDegrees >= TurretConstants.kMaxTurretHeadingDegrees
+            && mechanismVoltage > 0.0) {
+            return 0.0;
+        }
+
+        if (currentHeadingDegrees <= TurretConstants.kMinTurretHeadingDegrees
+            && mechanismVoltage < 0.0) {
+            return 0.0;
+        }
+
+        return mechanismVoltage;
     }
 
     private void reportStartupEncoderFaultOnce() {
@@ -424,5 +518,17 @@ public class TurretHeading {
             false
         );
         reportedFallbackWarning = true;
+    }
+
+    private void reportSysIdNotAllowedWarningOnce() {
+        if (reportedSysIdNotAllowedWarning) {
+            return;
+        }
+
+        DriverStation.reportWarning(
+            "Turret heading SysId requested before heading motion is allowed; heading motor will stay stopped.",
+            false
+        );
+        reportedSysIdNotAllowedWarning = true;
     }
 }

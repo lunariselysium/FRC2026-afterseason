@@ -4,19 +4,28 @@
 
 package frc.robot.subsystems;
 
+import static edu.wpi.first.units.Units.*;
+
 import com.ctre.phoenix6.CANBus;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
+import com.ctre.phoenix6.configs.MotionMagicConfigs;
+import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.Follower;
+import com.ctre.phoenix6.controls.MotionMagicVoltage;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
+import com.ctre.phoenix6.signals.StaticFeedforwardSignValue;
 
-import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.units.measure.Voltage;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
+import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 import frc.robot.Constants.IntakeConstants;
 
 public class Intake extends SubsystemBase {
@@ -34,16 +43,42 @@ public class Intake extends SubsystemBase {
         IntakeConstants.kRightRollerMotorCanId,
         intakeCanBus
     );
+    private final MotionMagicVoltage positionRequest = new MotionMagicVoltage(0.0);
 
     private double targetPositionMotorRotations;
     private double appliedDeployMotorOutput;
+    private double appliedDeployMechanismVoltage;
+    private double appliedClosedLoopFeedForwardVolts;
     private double appliedRollerOutput;
     private double homingStartTimestampSeconds;
     private double highCurrentStartTimestampSeconds = Double.NaN;
+    private boolean deployedHardstopCurrentHigh;
+    private boolean deployedHardstopCaptured;
     private boolean targetDeployed;
     private boolean positionControlActive;
     private boolean homing;
     private boolean homed;
+    private boolean homingTimedOut;
+    private boolean sysIdActive;
+    private boolean reportedSysIdNotHomedWarning;
+
+    private final SysIdRoutine deploySysIdRoutine = new SysIdRoutine(
+        new SysIdRoutine.Config(
+            Volts.of(IntakeConstants.kSysIdQuasistaticRampRateVoltsPerSecond).per(Second),
+            Volts.of(IntakeConstants.kSysIdDynamicStepVolts),
+            Seconds.of(IntakeConstants.kSysIdTimeoutSeconds)
+        ),
+        new SysIdRoutine.Mechanism(
+            this::runDeploySysIdVoltage,
+            log -> log.motor("intake-deploy")
+                .voltage(Volts.of(appliedDeployMechanismVoltage))
+                .angularPosition(Rotations.of(getIntakePositionMotorRotations()))
+                .angularVelocity(RotationsPerSecond.of(getIntakeVelocityMotorRotationsPerSecond()))
+                .current(Amps.of(getDeployStatorCurrentAmps())),
+            this,
+            "IntakeDeploy"
+        )
+    );
 
     public Intake() {
         deployMotor.setNeutralMode(NeutralModeValue.Coast);
@@ -51,6 +86,7 @@ public class Intake extends SubsystemBase {
         rightRollerMotor.setNeutralMode(NeutralModeValue.Coast);
 
         applyDeployOperatingCurrentLimits();
+        applyDeployPositionControlConfig();
 
         TalonFXConfiguration rollerConfiguration = new TalonFXConfiguration().withCurrentLimits(
             new CurrentLimitsConfigs()
@@ -84,12 +120,24 @@ public class Intake extends SubsystemBase {
         return deployMotor.getStatorCurrent().getValueAsDouble();
     }
 
+    public double getDeployMechanismVoltage() {
+        return IntakeConstants.kPositionMotorOutputSign * deployMotor.getMotorVoltage().getValueAsDouble();
+    }
+
+    public double getIntakeVelocityMotorRotationsPerSecond() {
+        return IntakeConstants.kDeployPositionSensorSign * deployMotor.getVelocity().getValueAsDouble();
+    }
+
     public boolean isHoming() {
         return homing;
     }
 
     public boolean isHomed() {
         return homed;
+    }
+
+    public boolean didHomingTimeOut() {
+        return homingTimedOut;
     }
 
     public boolean isTargetDeployed() {
@@ -104,6 +152,23 @@ public class Intake extends SubsystemBase {
         return positionControlActive;
     }
 
+    public boolean isClosedLoopAtTarget() {
+        return Math.abs(getClosedLoopErrorMotorRotations())
+            <= IntakeConstants.kPositionToleranceMotorRotations;
+    }
+
+    public boolean isSysIdActive() {
+        return sysIdActive;
+    }
+
+    public Command sysIdQuasistatic(Direction direction) {
+        return runOnce(this::prepareDeploySysId).andThen(deploySysIdRoutine.quasistatic(direction));
+    }
+
+    public Command sysIdDynamic(Direction direction) {
+        return runOnce(this::prepareDeploySysId).andThen(deploySysIdRoutine.dynamic(direction));
+    }
+
     public void moveToStowedSetpoint() {
         if (!isPositionControlAllowed()) {
             targetPositionMotorRotations = getIntakePositionMotorRotations();
@@ -112,7 +177,9 @@ public class Intake extends SubsystemBase {
         }
 
         homing = false;
+        sysIdActive = false;
         targetDeployed = false;
+        resetDeployedHardstopCapture();
         targetPositionMotorRotations = 0.0;
         positionControlActive = true;
     }
@@ -125,7 +192,9 @@ public class Intake extends SubsystemBase {
         }
 
         homing = false;
+        sysIdActive = false;
         targetDeployed = true;
+        resetDeployedHardstopCapture();
         targetPositionMotorRotations = IntakeConstants.kDeployedSetpointMotorRotations;
         positionControlActive = true;
     }
@@ -134,8 +203,11 @@ public class Intake extends SubsystemBase {
         applyDeployHomingCurrentLimits();
         homing = true;
         homed = false;
+        homingTimedOut = false;
+        sysIdActive = false;
         targetDeployed = false;
         positionControlActive = false;
+        resetDeployedHardstopCapture();
         homingStartTimestampSeconds = Timer.getFPGATimestamp();
         highCurrentStartTimestampSeconds = Double.NaN;
     }
@@ -159,15 +231,23 @@ public class Intake extends SubsystemBase {
             }
             homing = false;
             positionControlActive = false;
+            sysIdActive = false;
+            resetDeployedHardstopCapture();
             setDeployMotorOutput(0.0);
             stopRollers();
+        } else if (isSysIdActive()) {
+            positionControlActive = false;
+            homing = false;
+            resetDeployedHardstopCapture();
         } else if (homing) {
             updateHomingControl();
         } else if (!isPositionControlAllowed()) {
             targetPositionMotorRotations = getIntakePositionMotorRotations();
             positionControlActive = false;
+            resetDeployedHardstopCapture();
             setDeployMotorOutput(0.0);
         } else if (!isPositionControlActive()) {
+            deployedHardstopCurrentHigh = false;
             setDeployMotorOutput(0.0);
         } else {
             updatePositionControl();
@@ -176,16 +256,38 @@ public class Intake extends SubsystemBase {
         SmartDashboard.putNumber("Intake/PositionMotorRotations", getIntakePositionMotorRotations());
         SmartDashboard.putNumber("Intake/TargetMotorRotations", getTargetPositionMotorRotations());
         SmartDashboard.putNumber("Intake/DeployMotorOutput", appliedDeployMotorOutput);
+        SmartDashboard.putNumber("Intake/DeployMechanismVoltage", appliedDeployMechanismVoltage);
+        SmartDashboard.putNumber("Intake/ClosedLoopFeedForwardVolts", appliedClosedLoopFeedForwardVolts);
+        SmartDashboard.putNumber("Intake/MeasuredMechanismVoltage", getDeployMechanismVoltage());
+        SmartDashboard.putNumber("Intake/VelocityMotorRotationsPerSecond", getIntakeVelocityMotorRotationsPerSecond());
+        SmartDashboard.putNumber("Intake/ClosedLoopReferenceMotorRotations", getClosedLoopReferenceMotorRotations());
+        SmartDashboard.putNumber("Intake/ClosedLoopErrorMotorRotations", getClosedLoopErrorMotorRotations());
+        SmartDashboard.putNumber("Intake/ClosedLoopOutput", getClosedLoopOutput());
+        SmartDashboard.putBoolean("Intake/AtTarget", isAtTargetPosition());
+        SmartDashboard.putBoolean("Intake/ClosedLoopAtTarget", isClosedLoopAtTarget());
         SmartDashboard.putNumber("Intake/RollerOutput", appliedRollerOutput);
         SmartDashboard.putBoolean("Intake/Homing", isHoming());
         SmartDashboard.putBoolean("Intake/Homed", isHomed());
+        SmartDashboard.putBoolean("Intake/TargetDeployed", isTargetDeployed());
+        SmartDashboard.putBoolean("Intake/PositionControlActive", isPositionControlActive());
+        SmartDashboard.putBoolean("Intake/HomingTimedOut", didHomingTimeOut());
+        SmartDashboard.putBoolean("Intake/SysIdActive", isSysIdActive());
+        SmartDashboard.putBoolean("Intake/DeployedHardstopCurrentHigh", deployedHardstopCurrentHigh);
+        SmartDashboard.putBoolean("Intake/DeployedHardstopCaptured", deployedHardstopCaptured);
     }
 
     private void updateHomingControl() {
         double nowSeconds = Timer.getFPGATimestamp();
+        double homingElapsedSeconds = nowSeconds - homingStartTimestampSeconds;
+
+        if (homingElapsedSeconds >= IntakeConstants.kHomingTimeoutSeconds) {
+            failHomingTimeout();
+            return;
+        }
+
         setDeployMotorOutput(IntakeConstants.kHomingMotorOutput);
 
-        if (nowSeconds - homingStartTimestampSeconds < IntakeConstants.kHomingMinRunTimeSeconds) {
+        if (homingElapsedSeconds < IntakeConstants.kHomingMinRunTimeSeconds) {
             return;
         }
 
@@ -210,33 +312,158 @@ public class Intake extends SubsystemBase {
         }
     }
 
-    private void updatePositionControl() {
-        double positionErrorMotorRotations = getPositionErrorMotorRotations();
-        if (Math.abs(positionErrorMotorRotations) <= IntakeConstants.kPositionToleranceMotorRotations) {
-            positionControlActive = false;
-            setDeployMotorOutput(0.0);
+    private void failHomingTimeout() {
+        homing = false;
+        homed = false;
+        homingTimedOut = true;
+        positionControlActive = false;
+        targetPositionMotorRotations = getIntakePositionMotorRotations();
+        applyDeployOperatingCurrentLimits();
+        setDeployMotorOutput(0.0);
+
+        DriverStation.reportWarning(
+            "Intake deploy homing timed out after "
+                + IntakeConstants.kHomingTimeoutSeconds
+                + " seconds; stopping deploy motor.",
+            false
+        );
+    }
+
+    private void prepareDeploySysId() {
+        applyDeployOperatingCurrentLimits();
+        homing = false;
+        positionControlActive = false;
+        sysIdActive = false;
+        reportedSysIdNotHomedWarning = false;
+        stopRollers();
+        setDeployMotorVoltage(0.0);
+    }
+
+    private void runDeploySysIdVoltage(Voltage voltage) {
+        double requestedMechanismVoltage = voltage.in(Volts);
+        if (Math.abs(requestedMechanismVoltage) < 1.0e-6) {
+            sysIdActive = false;
+            setDeployMotorVoltage(0.0);
             return;
         }
 
-        double motorOutput = IntakeConstants.kPositionMotorOutputSign
-            * IntakeConstants.kPositionKp
-            * positionErrorMotorRotations;
+        sysIdActive = true;
+        if (!isHomed()) {
+            reportSysIdNotHomedWarningOnce();
+            setDeployMotorVoltage(0.0);
+            return;
+        }
 
-        setDeployMotorOutput(
-            MathUtil.clamp(
-                motorOutput,
-                -IntakeConstants.kMaxPositionMotorOutput,
-                IntakeConstants.kMaxPositionMotorOutput
-            )
+        setDeployMotorVoltage(applySysIdTravelLimits(requestedMechanismVoltage));
+    }
+
+    private double applySysIdTravelLimits(double mechanismVoltage) {
+        double intakePositionMotorRotations = getIntakePositionMotorRotations();
+
+        if (intakePositionMotorRotations >= IntakeConstants.kDeployedSetpointMotorRotations
+            && mechanismVoltage > 0.0) {
+            return 0.0;
+        }
+
+        if (intakePositionMotorRotations <= 0.0 && mechanismVoltage < 0.0) {
+            return 0.0;
+        }
+
+        return mechanismVoltage;
+    }
+
+    private void reportSysIdNotHomedWarningOnce() {
+        if (reportedSysIdNotHomedWarning) {
+            return;
+        }
+
+        DriverStation.reportWarning(
+            "Intake deploy SysId requested before homing; deploy motor will stay stopped.",
+            false
         );
+        reportedSysIdNotHomedWarning = true;
+    }
+
+    private void updatePositionControl() {
+        targetPositionMotorRotations = clampPositionToTravelWindow(targetPositionMotorRotations);
+        if (shouldCaptureDeployedHardstop()) {
+            captureDeployedHardstopPosition();
+            return;
+        }
+
+        setDeployMotionMagicTarget(targetPositionMotorRotations);
+    }
+
+    private boolean shouldCaptureDeployedHardstop() {
+        if (!targetDeployed || !isNearDeployedHardstopCaptureWindow()) {
+            deployedHardstopCurrentHigh = false;
+            return false;
+        }
+
+        boolean currentHigh = getDeployStatorCurrentAmps()
+            >= IntakeConstants.kDeployedHardstopCaptureCurrentThresholdAmps;
+        boolean currentRisingEdge = currentHigh && !deployedHardstopCurrentHigh;
+        deployedHardstopCurrentHigh = currentHigh;
+        return currentRisingEdge;
+    }
+
+    private boolean isNearDeployedHardstopCaptureWindow() {
+        return getIntakePositionMotorRotations()
+            >= IntakeConstants.kDeployedSetpointMotorRotations
+                - IntakeConstants.kDeployedHardstopCaptureWindowMotorRotations;
+    }
+
+    private void captureDeployedHardstopPosition() {
+        deployMotor.setPosition(
+            getRawDeployMotorTargetRotations(IntakeConstants.kDeployedSetpointMotorRotations)
+        );
+        targetPositionMotorRotations = IntakeConstants.kDeployedSetpointMotorRotations;
+        positionControlActive = false;
+        deployedHardstopCaptured = true;
+        setDeployMotorOutput(0.0);
+    }
+
+    private void resetDeployedHardstopCapture() {
+        deployedHardstopCurrentHigh = false;
+        deployedHardstopCaptured = false;
+    }
+
+    private boolean isAtTargetPosition() {
+        return Math.abs(getPositionErrorMotorRotations())
+            <= IntakeConstants.kPositionToleranceMotorRotations;
     }
 
     private double getPositionErrorMotorRotations() {
         return targetPositionMotorRotations - getIntakePositionMotorRotations();
     }
 
+    private double clampPositionToTravelWindow(double positionMotorRotations) {
+        return Math.max(
+            0.0,
+            Math.min(IntakeConstants.kDeployedSetpointMotorRotations, positionMotorRotations)
+        );
+    }
+
     private double getRawDeployMotorPositionRotations() {
         return deployMotor.getPosition().getValueAsDouble();
+    }
+
+    private double getClosedLoopReferenceMotorRotations() {
+        return IntakeConstants.kDeployPositionSensorSign
+            * deployMotor.getClosedLoopReference().getValueAsDouble();
+    }
+
+    private double getClosedLoopErrorMotorRotations() {
+        return IntakeConstants.kDeployPositionSensorSign
+            * deployMotor.getClosedLoopError().getValueAsDouble();
+    }
+
+    private double getClosedLoopOutput() {
+        return deployMotor.getClosedLoopOutput().getValueAsDouble();
+    }
+
+    private double getRawDeployMotorTargetRotations(double targetMechanismMotorRotations) {
+        return IntakeConstants.kDeployPositionSensorSign * targetMechanismMotorRotations;
     }
 
     private MotorAlignmentValue getRightRollerMotorAlignment() {
@@ -261,19 +488,67 @@ public class Intake extends SubsystemBase {
 
     private void applyDeployCurrentLimits(double supplyCurrentLimitAmps, double statorCurrentLimitAmps) {
         deployMotor.getConfigurator().apply(
-            new TalonFXConfiguration().withCurrentLimits(
-                new CurrentLimitsConfigs()
-                    .withSupplyCurrentLimit(supplyCurrentLimitAmps)
-                    .withSupplyCurrentLimitEnable(true)
-                    .withStatorCurrentLimit(statorCurrentLimitAmps)
-                    .withStatorCurrentLimitEnable(true)
-            )
+            new CurrentLimitsConfigs()
+                .withSupplyCurrentLimit(supplyCurrentLimitAmps)
+                .withSupplyCurrentLimitEnable(true)
+                .withStatorCurrentLimit(statorCurrentLimitAmps)
+                .withStatorCurrentLimitEnable(true)
+        );
+    }
+
+    private void applyDeployPositionControlConfig() {
+        deployMotor.getConfigurator().apply(
+            new Slot0Configs()
+                .withKP(IntakeConstants.kPositionClosedLoopKp)
+                .withKD(IntakeConstants.kPositionClosedLoopKd)
+                .withKS(IntakeConstants.kPositionClosedLoopKs)
+                .withKV(IntakeConstants.kPositionClosedLoopKv)
+                .withKA(IntakeConstants.kPositionClosedLoopKa)
+                .withStaticFeedforwardSign(StaticFeedforwardSignValue.UseVelocitySign)
+        );
+        deployMotor.getConfigurator().apply(
+            new MotionMagicConfigs()
+                .withMotionMagicCruiseVelocity(
+                    IntakeConstants.kMotionMagicCruiseVelocityMotorRotationsPerSecond
+                )
+                .withMotionMagicAcceleration(
+                    IntakeConstants.kMotionMagicAccelerationMotorRotationsPerSecondSquared
+                )
         );
     }
 
     private void setDeployMotorOutput(double motorOutput) {
         appliedDeployMotorOutput = motorOutput;
+        appliedDeployMechanismVoltage = 0.0;
+        appliedClosedLoopFeedForwardVolts = 0.0;
         deployMotor.set(motorOutput);
+    }
+
+    private void setDeployMotorVoltage(double mechanismVoltage) {
+        appliedDeployMechanismVoltage = mechanismVoltage;
+        appliedDeployMotorOutput = 0.0;
+        appliedClosedLoopFeedForwardVolts = 0.0;
+        deployMotor.setVoltage(IntakeConstants.kPositionMotorOutputSign * mechanismVoltage);
+    }
+
+    private void setDeployMotionMagicTarget(double targetMechanismMotorRotations) {
+        double feedForwardVolts = getRawDeployMotorFeedForwardVolts(targetMechanismMotorRotations);
+        appliedDeployMotorOutput = 0.0;
+        appliedDeployMechanismVoltage = 0.0;
+        appliedClosedLoopFeedForwardVolts = feedForwardVolts;
+        deployMotor.setControl(
+            positionRequest
+                .withPosition(getRawDeployMotorTargetRotations(targetMechanismMotorRotations))
+                .withFeedForward(feedForwardVolts)
+        );
+    }
+
+    private double getRawDeployMotorFeedForwardVolts(double targetMechanismMotorRotations) {
+        if (targetMechanismMotorRotations <= 0.0) {
+            return IntakeConstants.kStowAssistFeedForwardVolts;
+        }
+
+        return 0.0;
     }
 
     private void setRollerOutput(double rollerOutput) {

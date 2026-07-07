@@ -1,0 +1,35 @@
+{
+  "camera_source": 0,
+  "camera_width": 1280,
+  "camera_height": 720,
+  "capture_backend": "dshow",
+  "horizontal_fov_deg": 70.0,
+  "intrinsics": null,
+  "field_layout_path": "../../docs/2026-rebuilt-andymark.json",
+  "field_image_path": "../../docs/field-layout.png",
+  "tag_family": "DICT_APRILTAG_36h11",
+  "tag_size_m": 0.1651,
+  "map_mode": "auto",
+  "piece_position_method": "known_width",
+  "game_piece_diameter_m": 0.15,
+  "pose_stale_after_seconds": 0.4,
+  "yolo": {
+    "backend": "ncnn",
+    "model_dir": "../models/game_piece_ncnn_model",
+    "input_size": 640,
+    "inference_stride": 1,
+    "score_threshold": 0.35,
+    "nms_threshold": 0.45,
+    "classes": ["game_piece"],
+    "target_classes": ["game_piece"],
+    "use_vulkan": true,
+    "use_fp16": true,
+    "cpu_threads": 4,
+    "input_name": null,
+    "output_name": null
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 5808
+  }
+}

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "floortrack"
+version = "0.1.0"
+description = "Single-tag FRC field pose and game-piece floor mapping UI."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "opencv-contrib-python>=4.9",
+    "ncnn>=1.0.20240410",
+]
+
+[project.scripts]
+floortrack = "floortrack.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["floortrack*"]
+
+[tool.setuptools.package-data]
+floortrack = ["static/*"]

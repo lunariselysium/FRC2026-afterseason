@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Floortrack</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="map-pane" aria-label="Field map">
+        <canvas id="fieldCanvas"></canvas>
+      </section>
+      <aside class="side-pane">
+        <section class="video-pane" aria-label="Camera view">
+          <img id="videoFeed" alt="">
+          <div id="videoFallback">No frame</div>
+        </section>
+        <section class="telemetry-pane" aria-label="Telemetry">
+          <div class="title-row">
+            <h1>Floortrack</h1>
+            <span id="statusPill">starting</span>
+          </div>
+          <div class="metric-grid">
+            <div>
+              <span>FPS</span>
+              <strong id="fpsValue">0</strong>
+            </div>
+            <div>
+              <span>Pose</span>
+              <strong id="poseValue">stale</strong>
+            </div>
+            <div>
+              <span>Tag</span>
+              <strong id="tagValue">-</strong>
+            </div>
+            <div>
+              <span>Pieces</span>
+              <strong id="pieceCount">0</strong>
+            </div>
+          </div>
+          <div class="pose-line" id="poseLine">x --, y --, z --</div>
+          <div class="timing-line" id="timingLine">tag -- ms, yolo -- ms, jpeg -- ms</div>
+          <div class="yolo-line" id="yoloLine">YOLO --</div>
+          <div class="piece-list" id="pieceList"></div>
+        </section>
+      </aside>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

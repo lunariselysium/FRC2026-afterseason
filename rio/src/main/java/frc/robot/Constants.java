@@ -186,9 +186,9 @@ public final class Constants {
                 kFieldWidthMeters / 2.0 + kPassTargetYOffsetFromFieldCenterMeters
             );
 
-        public static final double kHubVisualTrimYawSign = -1.0;
-        public static final double kHubVisualTrimYawGain = 0.60;
-        public static final double kHubVisualTrimToleranceDegrees = 1.0;
+        public static final double kHubVisualTrimYawSign = 1.0;
+        public static final double kHubVisualTrimYawGain = 0.30;
+        public static final double kHubVisualTrimToleranceDegrees = 3.0;
         public static final double kHubVisualTrimMaxCorrectionDegrees = 8.0;
         public static final double kHubVisualYawStaleSeconds = 0.25;
 
@@ -199,12 +199,13 @@ public final class Constants {
         public static final double kMinShotFlywheelRotationsPerSecond = 20.0;
         public static final double kMaxShotFlywheelRotationsPerSecond = 60.0;
 
-        // Provisional maps only. Replace these rows with measured shots during calibration.
+        // Hub map is measured; pass map is provisional until calibrated.
         public static final ShotMapPoint[] kHubShotMap = {
-            new ShotMapPoint(1.50, 18.0, 31.0),
-            new ShotMapPoint(2.50, 24.0, 33.0),
-            new ShotMapPoint(3.50, 30.0, 35.0),
-            new ShotMapPoint(4.50, 35.0, 37.0),
+            new ShotMapPoint(1.74, 4.8, 40.0),
+            new ShotMapPoint(2.30, 9.8, 40.0),
+            new ShotMapPoint(3.00, 17.0, 43.0),
+            new ShotMapPoint(3.90, 20.0, 47.0),
+            new ShotMapPoint(4.63, 20.0, 50.0),
         };
         public static final ShotMapPoint[] kPassShotMap = {
             new ShotMapPoint(3.00, 16.0, 30.0),
@@ -213,11 +214,11 @@ public final class Constants {
             new ShotMapPoint(9.00, 34.0, 42.0),
         };
         public static final ShotCurve kHubShotCurve = new ShotCurve(
-            ShotCurveType.INTERPOLATED_MAP,
-            ShotCurveType.INTERPOLATED_MAP,
+            ShotCurveType.POLYNOMIAL,
+            ShotCurveType.POLYNOMIAL,
             kHubShotMap,
-            new double[] {},
-            new double[] {}
+            new double[] {-25.23417318, 21.39877651, -2.50920669},
+            new double[] {38.43900829, -0.50053489, 0.6596612}
         );
         public static final ShotCurve kPassShotCurve = new ShotCurve(
             ShotCurveType.INTERPOLATED_MAP,
@@ -353,7 +354,7 @@ public final class Constants {
         public static final double kMinPitchDegrees = 0.0;
         public static final double kMaxPitchDegrees = 35.0;
         public static final double kTargetPitchStepDegrees = 5.0;
-        public static final double kPitchToleranceDegrees = 0.5;
+        public static final double kPitchToleranceDegrees = 0.8;
 
         public static final double kMaxPitchVelocityDegreesPerSecond = 600.0;
         public static final double kMaxPitchAccelerationDegreesPerSecondSquared = 1000.0;

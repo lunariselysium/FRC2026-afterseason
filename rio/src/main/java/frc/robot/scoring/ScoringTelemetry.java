@@ -9,10 +9,12 @@ import java.util.OptionalDouble;
 
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import frc.robot.Constants.ScoringConstants;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.robot.subsystems.Turret;
@@ -36,7 +38,14 @@ public class ScoringTelemetry {
     }
 
     public void update() {
-        Pose2d robotPose = drivetrain.getState().Pose;
+        var drivetrainState = drivetrain.getState();
+        Pose2d robotPose = drivetrainState.Pose;
+        ChassisSpeeds robotSpeeds = drivetrainState.Speeds;
+        Pose2d predictedRobotPose = ScoringCalculator.predictRobotPose(
+            robotPose,
+            robotSpeeds,
+            ScoringConstants.kShotMotionPredictionSeconds
+        );
         double robotHeadingDegrees = robotPose.getRotation().getDegrees();
         Optional<Alliance> alliance = DriverStation.getAlliance();
 
@@ -55,6 +64,16 @@ public class ScoringTelemetry {
             kDashboardPrefix + "Alliance",
             alliance.isPresent() ? alliance.get().name() : "UNKNOWN"
         );
+        SmartDashboard.putNumber(
+            kDashboardPrefix + "MotionPredictionSeconds",
+            ScoringConstants.kShotMotionPredictionSeconds
+        );
+        SmartDashboard.putNumber(kDashboardPrefix + "PredictedRobotX", predictedRobotPose.getX());
+        SmartDashboard.putNumber(kDashboardPrefix + "PredictedRobotY", predictedRobotPose.getY());
+        SmartDashboard.putNumber(
+            kDashboardPrefix + "PredictedRobotHeadingDegrees",
+            wrapDegrees(predictedRobotPose.getRotation().getDegrees())
+        );
 
         if (alliance.isEmpty()) {
             SmartDashboard.putBoolean(kDashboardPrefix + "TargetValid", false);
@@ -63,24 +82,41 @@ public class ScoringTelemetry {
             return;
         }
 
-        OptionalDouble hubYawDegrees = vision.getTurretForwardHubYawDegrees(alliance.get());
+        OptionalDouble hubVisionCorrectionDegrees =
+            vision.getTurretForwardHubVisionCorrectionDegrees(alliance.get());
         ScoringTarget target = ScoringCalculator.calculateTarget(
-            robotPose,
-            turret.getHeadingDegrees(),
+            predictedRobotPose,
+            robotSpeeds,
+            ScoringConstants.kShotTimeOfFlightSeconds,
             alliance.get(),
-            hubYawDegrees
+            hubVisionCorrectionDegrees
         );
 
         SmartDashboard.putBoolean(kDashboardPrefix + "TargetValid", true);
         SmartDashboard.putString(kDashboardPrefix + "Status", "READY_TO_TUNE");
-        publishTarget(target, hubYawDegrees);
+        publishTarget(target, hubVisionCorrectionDegrees);
         publishTurretState();
     }
 
-    private void publishTarget(ScoringTarget target, OptionalDouble hubYawDegrees) {
+    private void publishTarget(
+        ScoringTarget target,
+        OptionalDouble hubVisionCorrectionDegrees
+    ) {
         SmartDashboard.putString(kDashboardPrefix + "TargetMode", target.mode().name());
         SmartDashboard.putNumber(kDashboardPrefix + "TargetX", target.fieldPoint().getX());
         SmartDashboard.putNumber(kDashboardPrefix + "TargetY", target.fieldPoint().getY());
+        SmartDashboard.putNumber(
+            kDashboardPrefix + "CompensatedTargetX",
+            target.compensatedFieldPoint().getX()
+        );
+        SmartDashboard.putNumber(
+            kDashboardPrefix + "CompensatedTargetY",
+            target.compensatedFieldPoint().getY()
+        );
+        SmartDashboard.putNumber(
+            kDashboardPrefix + "ShotTimeOfFlightSeconds",
+            ScoringConstants.kShotTimeOfFlightSeconds
+        );
         SmartDashboard.putNumber(kDashboardPrefix + "TurretFieldX", target.turretFieldPoint().getX());
         SmartDashboard.putNumber(kDashboardPrefix + "TurretFieldY", target.turretFieldPoint().getY());
         SmartDashboard.putNumber(kDashboardPrefix + "DistanceMeters", target.distanceMeters());
@@ -97,10 +133,15 @@ public class ScoringTelemetry {
             target.turretHeadingDegrees()
         );
         SmartDashboard.putNumber(kDashboardPrefix + "VisualTrimDegrees", target.visualTrimDegrees());
-        SmartDashboard.putBoolean(kDashboardPrefix + "HubYawAvailable", hubYawDegrees.isPresent());
+        SmartDashboard.putBoolean(
+            kDashboardPrefix + "HubVisionAssistAvailable",
+            hubVisionCorrectionDegrees.isPresent()
+        );
         SmartDashboard.putNumber(
-            kDashboardPrefix + "HubYawDegrees",
-            hubYawDegrees.isPresent() ? hubYawDegrees.getAsDouble() : 0.0
+            kDashboardPrefix + "HubVisionCorrectionDegrees",
+            hubVisionCorrectionDegrees.isPresent()
+                ? hubVisionCorrectionDegrees.getAsDouble()
+                : 0.0
         );
         SmartDashboard.putNumber(
             kDashboardPrefix + "SuggestedPitchDegrees",
@@ -143,9 +184,14 @@ public class ScoringTelemetry {
             kDashboardPrefix + "TargetFlywheelRps",
             turret.getTargetFlywheelVelocityRotationsPerSecond()
         );
+        SmartDashboard.putNumber(
+            kDashboardPrefix + "FlywheelFeedingLoadFeedforwardVolts",
+            turret.getFlywheelFeedingLoadFeedforwardVolts()
+        );
         SmartDashboard.putBoolean(kDashboardPrefix + "HeadingReady", turret.isHeadingAtTarget());
         SmartDashboard.putBoolean(kDashboardPrefix + "PitchReady", turret.isPitchAtTarget());
-        SmartDashboard.putBoolean(kDashboardPrefix + "FlywheelReady", turret.isFlywheelAtTarget());
+        SmartDashboard.putBoolean(kDashboardPrefix + "FlywheelReady", turret.isFlywheelReadyToShoot());
+        SmartDashboard.putBoolean(kDashboardPrefix + "FlywheelAtTarget", turret.isFlywheelAtTarget());
         SmartDashboard.putBoolean(kDashboardPrefix + "PitchHomed", turret.isPitchHomed());
     }
 

@@ -36,6 +36,7 @@ public class TurretFlywheel {
     private double targetVelocityRotationsPerSecond =
         TurretFlywheelConstants.kTargetVelocityRotationsPerSecond;
     private double appliedSysIdVoltage;
+    private double appliedFeedingLoadFeedforwardVolts;
     private boolean running;
     private boolean sysIdActive;
 
@@ -119,26 +120,36 @@ public class TurretFlywheel {
         setSysIdVoltage(0.0);
     }
 
-    public void updateControl() {
+    public void updateControl(boolean feedingLoadActive) {
         if (DriverStation.isDisabled()) {
             running = false;
             sysIdActive = false;
+            appliedFeedingLoadFeedforwardVolts = 0.0;
             stopLeaderMotor();
             return;
         }
 
         if (sysIdActive) {
+            appliedFeedingLoadFeedforwardVolts = 0.0;
             return;
         }
 
         if (!running) {
+            appliedFeedingLoadFeedforwardVolts = 0.0;
             stopLeaderMotor();
             return;
         }
 
         appliedSysIdVoltage = 0.0;
+        appliedFeedingLoadFeedforwardVolts =
+            TurretFlywheelMath.getFeedingLoadFeedforwardVolts(
+                feedingLoadActive,
+                TurretFlywheelConstants.kFeedingLoadFeedforwardVolts
+            );
         leaderMotor.setControl(
-            velocityRequest.withVelocity(targetVelocityRotationsPerSecond)
+            velocityRequest
+                .withVelocity(targetVelocityRotationsPerSecond)
+                .withFeedForward(appliedFeedingLoadFeedforwardVolts)
         );
     }
 
@@ -156,6 +167,10 @@ public class TurretFlywheel {
 
     public double getAppliedSysIdVoltage() {
         return appliedSysIdVoltage;
+    }
+
+    public double getAppliedFeedingLoadFeedforwardVolts() {
+        return appliedFeedingLoadFeedforwardVolts;
     }
 
     public double getLeaderMotorVoltage() {
@@ -176,8 +191,20 @@ public class TurretFlywheel {
 
     public boolean isAtTarget() {
         return running
-            && Math.abs(getVelocityRotationsPerSecond() - targetVelocityRotationsPerSecond)
-                <= TurretFlywheelConstants.kVelocityToleranceRotationsPerSecond;
+            && TurretFlywheelMath.isWithinVelocityTolerance(
+                targetVelocityRotationsPerSecond,
+                getVelocityRotationsPerSecond(),
+                TurretFlywheelConstants.kVelocityToleranceRotationsPerSecond
+            );
+    }
+
+    public boolean isReadyToShoot() {
+        return running
+            && TurretFlywheelMath.isWithinVelocityTolerance(
+                targetVelocityRotationsPerSecond,
+                getVelocityRotationsPerSecond(),
+                TurretFlywheelConstants.kReadyVelocityToleranceRotationsPerSecond
+            );
     }
 
     private MotorAlignmentValue getFollowerMotorAlignment() {
@@ -193,6 +220,7 @@ public class TurretFlywheel {
 
     private void stopLeaderMotor() {
         appliedSysIdVoltage = 0.0;
+        appliedFeedingLoadFeedforwardVolts = 0.0;
         leaderMotor.stopMotor();
     }
 }

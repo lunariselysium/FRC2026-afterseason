@@ -29,7 +29,7 @@ public final class Constants {
         public static final boolean kLeftFramePoseUpdatesEnabled = true;
         public static final boolean kRightFramePoseUpdatesEnabled = true;
         public static final boolean kBackFramePoseUpdatesEnabled = true;
-        public static final boolean kTurretForwardPoseUpdatesEnabled = true;
+        public static final boolean kTurretForwardPoseUpdatesEnabled = false;
 
         /*
          * Robot-to-camera transforms use meters and radians, with WPILib axes:
@@ -187,12 +187,14 @@ public final class Constants {
             );
 
         public static final double kHubVisualTrimYawSign = 1.0;
-        public static final double kHubVisualTrimYawGain = 0.30;
-        public static final double kHubVisualTrimToleranceDegrees = 3.0;
+        public static final double kHubVisualTrimYawGain = 0.50;
+        public static final double kHubVisualTrimToleranceDegrees = 2.0;
         public static final double kHubVisualTrimMaxCorrectionDegrees = 8.0;
-        public static final double kHubVisualYawStaleSeconds = 0.25;
+        public static final double kHubVisionAssistStaleSeconds = 0.10;
 
         public static final int kReadyDebounceCycles = 5;
+        public static final double kShotMotionPredictionSeconds = 0.12;
+        public static final double kShotTimeOfFlightSeconds = 1.0;
 
         public static final double kMinShotPitchDegrees = TurretPitchConstants.kMinPitchDegrees;
         public static final double kMaxShotPitchDegrees = TurretPitchConstants.kMaxPitchDegrees;
@@ -307,9 +309,10 @@ public final class Constants {
         public static final double kHeadingEncoderStartupGraceSeconds = 1.0;
 
         public static final double kTargetHeadingStepDegrees = 30.0;
-        public static final double kHeadingToleranceDegrees = 1.0;
+        public static final double kHeadingToleranceDegrees = 0.5;
+        public static final double kHeadingReadyToleranceDegrees = 10.0;
         public static final double kMaxTurretHeadingVelocityDegreesPerSecond = 600.0;
-        public static final double kMaxTurretHeadingAccelerationDegreesPerSecondSquared = 1000.0;
+        public static final double kMaxTurretHeadingAccelerationDegreesPerSecondSquared = 1500.0;
         public static final double kTurretHeadingKp = 0.0044;
         public static final double kTurretHeadingKv = 0.0010;
         public static final double kTurretHeadingKs = 0.015;
@@ -354,7 +357,8 @@ public final class Constants {
         public static final double kMinPitchDegrees = 0.0;
         public static final double kMaxPitchDegrees = 35.0;
         public static final double kTargetPitchStepDegrees = 5.0;
-        public static final double kPitchToleranceDegrees = 0.8;
+        public static final double kPitchToleranceDegrees = 0.5;
+        public static final double kPitchReadyToleranceDegrees = 2.0;
 
         public static final double kMaxPitchVelocityDegreesPerSecond = 600.0;
         public static final double kMaxPitchAccelerationDegreesPerSecondSquared = 1000.0;
@@ -391,10 +395,12 @@ public final class Constants {
 
         public static final double kTargetVelocityRotationsPerSecond = 42.0;
         public static final double kVelocityToleranceRotationsPerSecond = 2.0;
-        public static final double kFlywheelKp = 0.15;
+        public static final double kReadyVelocityToleranceRotationsPerSecond = 5.0;
+        public static final double kFlywheelKp = 0.16;
         public static final double kFlywheelKv = 0.11285;
         public static final double kFlywheelKa = 0.0028782;
         public static final double kFlywheelKs = 0.10952;
+        public static final double kFeedingLoadFeedforwardVolts = 0.5;
         public static final double kMotionMagicAccelerationRotationsPerSecondSquared = 70.0;
         public static final double kMotionMagicJerkRotationsPerSecondCubed = 700.0;
         public static final double kSupplyCurrentLimitAmps = 40.0;
@@ -428,8 +434,8 @@ public final class Constants {
         public static final String kMotorCanBus = "canivores";
 
         public static final double kFloorMotorOutput = 0.95;
-        public static final double kBeltMotorOutput = 0.48;
-        public static final double kHandoffWheelMotorOutput = 0.32;
+        public static final double kBeltMotorOutput = 0.95;
+        public static final double kHandoffWheelMotorOutput = 0.95;
 
         public static final double kFloorMotorOutputSign = 1.0;
         public static final double kBeltMotorOutputSign = 1.0;

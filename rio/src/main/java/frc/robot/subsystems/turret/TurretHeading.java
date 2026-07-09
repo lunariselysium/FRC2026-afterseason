@@ -170,8 +170,11 @@ public class TurretHeading {
 
     public boolean isAtTarget() {
         return isHeadingMotionAllowed()
-            && Math.abs(targetHeadingDegrees - getHeadingDegrees())
-                <= TurretConstants.kHeadingToleranceDegrees;
+            && TurretHeadingMath.isWithinTolerance(
+                targetHeadingDegrees,
+                getHeadingDegrees(),
+                TurretConstants.kHeadingReadyToleranceDegrees
+            );
     }
 
     public void stepTargetLeft() {

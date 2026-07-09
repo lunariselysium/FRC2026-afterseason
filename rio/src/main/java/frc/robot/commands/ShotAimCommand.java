@@ -12,6 +12,7 @@ import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
+import frc.robot.Constants.ScoringConstants;
 import frc.robot.scoring.ScoringCalculator;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
@@ -49,13 +50,20 @@ public class ShotAimCommand extends Command {
             return;
         }
 
-        Pose2d robotPose = drivetrain.getState().Pose;
-        OptionalDouble hubYawDegrees = vision.getTurretForwardHubYawDegrees(alliance.get());
+        var drivetrainState = drivetrain.getState();
+        Pose2d robotPose = ScoringCalculator.predictRobotPose(
+            drivetrainState.Pose,
+            drivetrainState.Speeds,
+            ScoringConstants.kShotMotionPredictionSeconds
+        );
+        OptionalDouble hubVisionCorrectionDegrees =
+            vision.getTurretForwardHubVisionCorrectionDegrees(alliance.get());
         ScoringTarget target = ScoringCalculator.calculateTarget(
             robotPose,
-            turret.getHeadingDegrees(),
+            drivetrainState.Speeds,
+            ScoringConstants.kShotTimeOfFlightSeconds,
             alliance.get(),
-            hubYawDegrees
+            hubVisionCorrectionDegrees
         );
 
         turret.setTargetHeadingDegrees(target.turretHeadingDegrees());

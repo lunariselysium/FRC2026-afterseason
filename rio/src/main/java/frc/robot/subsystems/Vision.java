@@ -19,9 +19,11 @@ import org.photonvision.targeting.PhotonTrackedTarget;
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.VecBuilder;
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
@@ -41,8 +43,8 @@ public class Vision extends SubsystemBase {
     private final Turret turret;
 
     private final VisionCamera[] cameras;
-    private final HubYawObservation blueHubYaw = new HubYawObservation();
-    private final HubYawObservation redHubYaw = new HubYawObservation();
+    private final HubVisionObservation blueHubVision = new HubVisionObservation();
+    private final HubVisionObservation redHubVision = new HubVisionObservation();
 
     public Vision(CommandSwerveDrivetrain drivetrain, Turret turret) {
         this.drivetrain = drivetrain;
@@ -76,8 +78,8 @@ public class Vision extends SubsystemBase {
         };
     }
 
-    public OptionalDouble getTurretForwardHubYawDegrees(Alliance alliance) {
-        return getHubYawObservation(alliance).getYawDegreesIfFresh();
+    public OptionalDouble getTurretForwardHubVisionCorrectionDegrees(Alliance alliance) {
+        return getHubVisionObservation(alliance).getCorrectionDegreesIfFresh();
     }
 
     public void updateControlAndTelemetry() {
@@ -85,7 +87,7 @@ public class Vision extends SubsystemBase {
             processCamera(camera);
             publishCameraTelemetry(camera);
         }
-        publishTurretForwardHubYawTelemetry();
+        publishTurretForwardHubVisionTelemetry();
     }
 
     private Transform3d getRobotToTurretForwardCamera() {
@@ -109,8 +111,9 @@ public class Vision extends SubsystemBase {
         camera.poseEstimator.setRobotToCameraTransform(robotToCamera);
 
         for (PhotonPipelineResult result : camera.photonCamera.getAllUnreadResults()) {
+            Pose2d robotPose = drivetrain.getState().Pose;
             updateTargetTelemetry(camera, result);
-            updateTurretForwardHubYaw(camera, result);
+            updateTurretForwardHubVisionAssist(camera, result, robotPose, robotToCamera);
 
             Optional<EstimatedRobotPose> estimatedPose = camera.poseEstimator.update(result);
             if (estimatedPose.isEmpty()) {
@@ -151,41 +154,103 @@ public class Vision extends SubsystemBase {
         }
     }
 
-    private void updateTurretForwardHubYaw(VisionCamera camera, PhotonPipelineResult result) {
+    private void updateTurretForwardHubVisionAssist(
+        VisionCamera camera,
+        PhotonPipelineResult result,
+        Pose2d robotPose,
+        Transform3d robotToCamera
+    ) {
         if (!camera.name.equals(VisionConstants.kTurretForwardCameraName)) {
             return;
         }
 
-        updateHubYawObservation(blueHubYaw, result, ScoringConstants.kBlueHubTagIds);
-        updateHubYawObservation(redHubYaw, result, ScoringConstants.kRedHubTagIds);
+        updateHubVisionObservation(
+            blueHubVision,
+            result,
+            ScoringConstants.kBlueHubTagIds,
+            ScoringConstants.kBlueHubCenterMeters,
+            robotPose,
+            robotToCamera
+        );
+        updateHubVisionObservation(
+            redHubVision,
+            result,
+            ScoringConstants.kRedHubTagIds,
+            ScoringConstants.kRedHubCenterMeters,
+            robotPose,
+            robotToCamera
+        );
     }
 
-    private void updateHubYawObservation(
-        HubYawObservation observation,
+    private void updateHubVisionObservation(
+        HubVisionObservation observation,
         PhotonPipelineResult result,
-        int[] fiducialIds
+        int[] fiducialIds,
+        Translation2d hubCenterMeters,
+        Pose2d robotPose,
+        Transform3d robotToCamera
     ) {
-        Optional<PhotonTrackedTarget> target = getTargetByFiducialIds(result, fiducialIds);
-        target.ifPresent(observation::update);
-    }
-
-    private Optional<PhotonTrackedTarget> getTargetByFiducialIds(
-        PhotonPipelineResult result,
-        int[] fiducialIds
-    ) {
-        PhotonTrackedTarget bestTarget = null;
+        double cameraToHubXTotalMeters = 0.0;
+        double cameraToHubYTotalMeters = 0.0;
+        double cameraToHubZTotalMeters = 0.0;
+        int correctionCount = 0;
+        int representativeTagId = -1;
+        double representativeCorrectionMagnitudeDegrees = Double.POSITIVE_INFINITY;
+        double expectedHubYawDegrees = VisionMath.getCameraYawDegreesToFieldPoint(
+            robotPose,
+            robotToCamera,
+            hubCenterMeters
+        );
         for (PhotonTrackedTarget target : result.getTargets()) {
             if (!containsFiducialId(fiducialIds, target.getFiducialId())) {
                 continue;
             }
 
-            if (bestTarget == null
-                || Math.abs(target.getYaw()) < Math.abs(bestTarget.getYaw())) {
-                bestTarget = target;
+            Optional<Pose3d> tagPose = kFieldLayout.getTagPose(target.getFiducialId());
+            if (tagPose.isEmpty()) {
+                continue;
+            }
+
+            Translation3d cameraToHubCenter = VisionMath.getCameraToFieldPointFromTag(
+                target.getBestCameraToTarget(),
+                tagPose.get(),
+                hubCenterMeters
+            );
+            cameraToHubXTotalMeters += cameraToHubCenter.getX();
+            cameraToHubYTotalMeters += cameraToHubCenter.getY();
+            cameraToHubZTotalMeters += cameraToHubCenter.getZ();
+            correctionCount++;
+
+            double observedHubYawDegrees = VisionMath.getCameraYawDegrees(cameraToHubCenter);
+            double tagCorrectionDegrees = VisionMath.getYawResidualDegrees(
+                observedHubYawDegrees,
+                expectedHubYawDegrees
+            );
+
+            double correctionMagnitudeDegrees = Math.abs(tagCorrectionDegrees);
+            if (correctionMagnitudeDegrees < representativeCorrectionMagnitudeDegrees) {
+                representativeCorrectionMagnitudeDegrees = correctionMagnitudeDegrees;
+                representativeTagId = target.getFiducialId();
             }
         }
 
-        return Optional.ofNullable(bestTarget);
+        if (correctionCount == 0) {
+            observation.clear();
+            return;
+        }
+
+        Translation3d averageCameraToHubCenter = new Translation3d(
+            cameraToHubXTotalMeters / correctionCount,
+            cameraToHubYTotalMeters / correctionCount,
+            cameraToHubZTotalMeters / correctionCount
+        );
+        double averagedHubYawDegrees =
+            VisionMath.getCameraYawDegrees(averageCameraToHubCenter);
+        observation.update(
+            VisionMath.getYawResidualDegrees(averagedHubYawDegrees, expectedHubYawDegrees),
+            representativeTagId,
+            correctionCount
+        );
     }
 
     private boolean containsFiducialId(int[] fiducialIds, int fiducialId) {
@@ -299,19 +364,26 @@ public class Vision extends SubsystemBase {
         SmartDashboard.putNumber(dashboardKey + "/FusedPoseCount", camera.fusedPoseCount);
     }
 
-    private HubYawObservation getHubYawObservation(Alliance alliance) {
-        return alliance == Alliance.Red ? redHubYaw : blueHubYaw;
+    private HubVisionObservation getHubVisionObservation(Alliance alliance) {
+        return alliance == Alliance.Red ? redHubVision : blueHubVision;
     }
 
-    private void publishTurretForwardHubYawTelemetry() {
-        publishHubYawTelemetry("Vision/TurretForwardHubYaw/Blue", blueHubYaw);
-        publishHubYawTelemetry("Vision/TurretForwardHubYaw/Red", redHubYaw);
+    private void publishTurretForwardHubVisionTelemetry() {
+        publishHubVisionTelemetry("Vision/TurretForwardHubAssist/Blue", blueHubVision);
+        publishHubVisionTelemetry("Vision/TurretForwardHubAssist/Red", redHubVision);
     }
 
-    private void publishHubYawTelemetry(String dashboardKey, HubYawObservation observation) {
-        SmartDashboard.putBoolean(dashboardKey + "/HasTarget", observation.hasFreshTarget());
-        SmartDashboard.putNumber(dashboardKey + "/YawDegrees", observation.yawDegrees);
-        SmartDashboard.putNumber(dashboardKey + "/TagId", observation.tagId);
+    private void publishHubVisionTelemetry(
+        String dashboardKey,
+        HubVisionObservation observation
+    ) {
+        SmartDashboard.putBoolean(
+            dashboardKey + "/HasCorrection",
+            observation.hasFreshCorrection()
+        );
+        SmartDashboard.putNumber(dashboardKey + "/CorrectionDegrees", observation.correctionDegrees);
+        SmartDashboard.putNumber(dashboardKey + "/RepresentativeTagId", observation.representativeTagId);
+        SmartDashboard.putNumber(dashboardKey + "/TargetCount", observation.targetCount);
     }
 
     private static final class VisionCamera {
@@ -352,31 +424,45 @@ public class Vision extends SubsystemBase {
         }
     }
 
-    private static final class HubYawObservation {
-        private boolean hasTarget;
-        private double yawDegrees;
-        private int tagId = -1;
+    private static final class HubVisionObservation {
+        private boolean hasCorrection;
+        private double correctionDegrees;
+        private int representativeTagId = -1;
+        private int targetCount;
         private double timestampSeconds = -1.0;
 
-        private void update(PhotonTrackedTarget target) {
-            hasTarget = true;
-            yawDegrees = target.getYaw();
-            tagId = target.getFiducialId();
+        private void update(
+            double correctionDegrees,
+            int representativeTagId,
+            int targetCount
+        ) {
+            hasCorrection = true;
+            this.correctionDegrees = correctionDegrees;
+            this.representativeTagId = representativeTagId;
+            this.targetCount = targetCount;
             timestampSeconds = Timer.getFPGATimestamp();
         }
 
-        private OptionalDouble getYawDegreesIfFresh() {
-            if (!hasFreshTarget()) {
+        private void clear() {
+            hasCorrection = false;
+            correctionDegrees = 0.0;
+            representativeTagId = -1;
+            targetCount = 0;
+            timestampSeconds = -1.0;
+        }
+
+        private OptionalDouble getCorrectionDegreesIfFresh() {
+            if (!hasFreshCorrection()) {
                 return OptionalDouble.empty();
             }
 
-            return OptionalDouble.of(yawDegrees);
+            return OptionalDouble.of(correctionDegrees);
         }
 
-        private boolean hasFreshTarget() {
-            return hasTarget
+        private boolean hasFreshCorrection() {
+            return hasCorrection
                 && Timer.getFPGATimestamp() - timestampSeconds
-                    <= ScoringConstants.kHubVisualYawStaleSeconds;
+                    <= ScoringConstants.kHubVisionAssistStaleSeconds;
         }
     }
 }

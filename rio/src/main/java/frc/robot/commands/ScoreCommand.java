@@ -60,13 +60,20 @@ public class ScoreCommand extends Command {
             return;
         }
 
-        Pose2d robotPose = drivetrain.getState().Pose;
-        OptionalDouble hubYawDegrees = vision.getTurretForwardHubYawDegrees(alliance.get());
+        var drivetrainState = drivetrain.getState();
+        Pose2d robotPose = ScoringCalculator.predictRobotPose(
+            drivetrainState.Pose,
+            drivetrainState.Speeds,
+            ScoringConstants.kShotMotionPredictionSeconds
+        );
+        OptionalDouble hubVisionCorrectionDegrees =
+            vision.getTurretForwardHubVisionCorrectionDegrees(alliance.get());
         ScoringTarget target = ScoringCalculator.calculateTarget(
             robotPose,
-            turret.getHeadingDegrees(),
+            drivetrainState.Speeds,
+            ScoringConstants.kShotTimeOfFlightSeconds,
             alliance.get(),
-            hubYawDegrees
+            hubVisionCorrectionDegrees
         );
 
         turret.setTargetHeadingDegrees(target.turretHeadingDegrees());
@@ -78,7 +85,7 @@ public class ScoreCommand extends Command {
         boolean ready = target.shotSetpoint().feedAllowedByDistance()
             && turret.isHeadingAtTarget()
             && turret.isPitchAtTarget()
-            && turret.isFlywheelAtTarget();
+            && turret.isFlywheelReadyToShoot();
         if (ready) {
             readyCycles++;
         } else {
@@ -93,7 +100,7 @@ public class ScoreCommand extends Command {
             stopFeeding();
         }
 
-        publishTargetTelemetry(target, hubYawDegrees, ready, shouldFeed);
+        publishTargetTelemetry(target, hubVisionCorrectionDegrees, ready, shouldFeed);
     }
 
     @Override
@@ -116,7 +123,7 @@ public class ScoreCommand extends Command {
 
     private void publishTargetTelemetry(
         ScoringTarget target,
-        OptionalDouble hubYawDegrees,
+        OptionalDouble hubVisionCorrectionDegrees,
         boolean ready,
         boolean feeding
     ) {
@@ -124,21 +131,42 @@ public class ScoreCommand extends Command {
         SmartDashboard.putString("Scoring/TargetMode", target.mode().name());
         SmartDashboard.putNumber("Scoring/TargetX", target.fieldPoint().getX());
         SmartDashboard.putNumber("Scoring/TargetY", target.fieldPoint().getY());
+        SmartDashboard.putNumber(
+            "Scoring/CompensatedTargetX",
+            target.compensatedFieldPoint().getX()
+        );
+        SmartDashboard.putNumber(
+            "Scoring/CompensatedTargetY",
+            target.compensatedFieldPoint().getY()
+        );
+        SmartDashboard.putNumber(
+            "Scoring/ShotTimeOfFlightSeconds",
+            ScoringConstants.kShotTimeOfFlightSeconds
+        );
         SmartDashboard.putNumber("Scoring/TurretFieldX", target.turretFieldPoint().getX());
         SmartDashboard.putNumber("Scoring/TurretFieldY", target.turretFieldPoint().getY());
         SmartDashboard.putNumber("Scoring/DistanceMeters", target.distanceMeters());
         SmartDashboard.putNumber("Scoring/FieldBearingDegrees", target.fieldBearingDegrees());
         SmartDashboard.putNumber("Scoring/TurretHeadingDegrees", target.turretHeadingDegrees());
         SmartDashboard.putNumber("Scoring/VisualTrimDegrees", target.visualTrimDegrees());
-        SmartDashboard.putBoolean("Scoring/HubYawAvailable", hubYawDegrees.isPresent());
+        SmartDashboard.putBoolean(
+            "Scoring/HubVisionAssistAvailable",
+            hubVisionCorrectionDegrees.isPresent()
+        );
         SmartDashboard.putNumber(
-            "Scoring/HubYawDegrees",
-            hubYawDegrees.isPresent() ? hubYawDegrees.getAsDouble() : 0.0
+            "Scoring/HubVisionCorrectionDegrees",
+            hubVisionCorrectionDegrees.isPresent()
+                ? hubVisionCorrectionDegrees.getAsDouble()
+                : 0.0
         );
         SmartDashboard.putNumber("Scoring/PitchDegrees", target.shotSetpoint().pitchDegrees());
         SmartDashboard.putNumber(
             "Scoring/FlywheelRps",
             target.shotSetpoint().flywheelRotationsPerSecond()
+        );
+        SmartDashboard.putNumber(
+            "Scoring/FlywheelFeedingLoadFeedforwardVolts",
+            turret.getFlywheelFeedingLoadFeedforwardVolts()
         );
         SmartDashboard.putBoolean(
             "Scoring/FeedAllowedByDistance",
@@ -146,7 +174,8 @@ public class ScoreCommand extends Command {
         );
         SmartDashboard.putBoolean("Scoring/HeadingReady", turret.isHeadingAtTarget());
         SmartDashboard.putBoolean("Scoring/PitchReady", turret.isPitchAtTarget());
-        SmartDashboard.putBoolean("Scoring/FlywheelReady", turret.isFlywheelAtTarget());
+        SmartDashboard.putBoolean("Scoring/FlywheelReady", turret.isFlywheelReadyToShoot());
+        SmartDashboard.putBoolean("Scoring/FlywheelAtTarget", turret.isFlywheelAtTarget());
         SmartDashboard.putNumber("Scoring/ReadyCycles", readyCycles);
         SmartDashboard.putBoolean("Scoring/Ready", ready);
         SmartDashboard.putBoolean("Scoring/Feeding", feeding);

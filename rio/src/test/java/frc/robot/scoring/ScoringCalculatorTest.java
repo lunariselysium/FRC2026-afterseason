@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.Constants.ScoringConstants.ShotCurve;
@@ -100,26 +102,153 @@ class ScoringCalculatorTest {
     void visualTrimAppliesToleranceGainClampAndConfiguredSign() {
         assertEquals(0.0, ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.empty()), kTolerance);
         assertEquals(0.0, ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(0.5)), kTolerance);
-        assertEquals(-3.0, ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(5.0)), kTolerance);
-        assertEquals(-8.0, ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(30.0)), kTolerance);
-        assertEquals(8.0, ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(-30.0)), kTolerance);
+        assertEquals(
+            ScoringConstants.kHubVisualTrimYawSign
+                * ScoringConstants.kHubVisualTrimYawGain
+                * 5.0,
+            ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(5.0)),
+            kTolerance
+        );
+        assertEquals(8.0, ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(30.0)), kTolerance);
+        assertEquals(-8.0, ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(-30.0)), kTolerance);
     }
 
     @Test
-    void visualServoTargetsCurrentTurretHeadingPlusCorrection() {
-        double currentTurretHeadingDegrees = 20.0;
-        ScoringCalculator.ScoringTarget target = ScoringCalculator.calculateTarget(
-            new Pose2d(2.0, ScoringConstants.kBlueHubCenterMeters.getY(), Rotation2d.kZero),
-            currentTurretHeadingDegrees,
+    void hubVisionAssistAddsCorrectionToPoseBasedHeading() {
+        Pose2d robotPose = new Pose2d(
+            2.0,
+            ScoringConstants.kBlueHubCenterMeters.getY() - 0.4,
+            Rotation2d.fromDegrees(15.0)
+        );
+        ScoringCalculator.ScoringTarget poseOnlyTarget = ScoringCalculator.calculateTarget(
+            robotPose,
+            Alliance.Blue,
+            OptionalDouble.empty()
+        );
+        ScoringCalculator.ScoringTarget assistedTarget = ScoringCalculator.calculateTarget(
+            robotPose,
+            120.0,
             Alliance.Blue,
             OptionalDouble.of(5.0)
         );
 
         assertEquals(
-            currentTurretHeadingDegrees + ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(5.0)),
-            target.turretHeadingDegrees(),
+            MathUtil.inputModulus(
+                poseOnlyTarget.turretHeadingDegrees()
+                    + ScoringCalculator.getHubVisualTrimDegrees(OptionalDouble.of(5.0)),
+                -180.0,
+                180.0
+            ),
+            assistedTarget.turretHeadingDegrees(),
             kTolerance
         );
+    }
+
+    @Test
+    void hubVisionAssistInsideDeadbandKeepsPoseBasedHeading() {
+        Pose2d robotPose = new Pose2d(
+            2.0,
+            ScoringConstants.kBlueHubCenterMeters.getY() - 0.4,
+            Rotation2d.fromDegrees(15.0)
+        );
+        ScoringCalculator.ScoringTarget poseOnlyTarget = ScoringCalculator.calculateTarget(
+            robotPose,
+            Alliance.Blue,
+            OptionalDouble.empty()
+        );
+        ScoringCalculator.ScoringTarget assistedTarget = ScoringCalculator.calculateTarget(
+            robotPose,
+            120.0,
+            Alliance.Blue,
+            OptionalDouble.of(0.5)
+        );
+
+        assertEquals(
+            poseOnlyTarget.turretHeadingDegrees(),
+            assistedTarget.turretHeadingDegrees(),
+            kTolerance
+        );
+    }
+
+    @Test
+    void predictsPoseFromRobotRelativeTranslationVelocity() {
+        Pose2d predictedPose = ScoringCalculator.predictRobotPose(
+            new Pose2d(1.0, 2.0, Rotation2d.fromDegrees(90.0)),
+            new ChassisSpeeds(2.0, 0.0, 0.0),
+            0.5
+        );
+
+        assertEquals(1.0, predictedPose.getX(), kTolerance);
+        assertEquals(3.0, predictedPose.getY(), kTolerance);
+        assertEquals(90.0, predictedPose.getRotation().getDegrees(), kTolerance);
+    }
+
+    @Test
+    void predictsPoseFromRobotRelativeAngularVelocity() {
+        Pose2d predictedPose = ScoringCalculator.predictRobotPose(
+            new Pose2d(1.0, 2.0, Rotation2d.fromDegrees(30.0)),
+            new ChassisSpeeds(0.0, 0.0, Math.PI),
+            0.25
+        );
+
+        assertEquals(1.0, predictedPose.getX(), kTolerance);
+        assertEquals(2.0, predictedPose.getY(), kTolerance);
+        assertEquals(75.0, predictedPose.getRotation().getDegrees(), kTolerance);
+    }
+
+    @Test
+    void convertsRobotRelativeVelocityToFieldRelativeVelocity() {
+        Translation2d fieldVelocity = ScoringCalculator.getFieldRelativeVelocityMetersPerSecond(
+            new Pose2d(1.0, 2.0, Rotation2d.fromDegrees(90.0)),
+            new ChassisSpeeds(2.0, 0.0, 0.0)
+        );
+
+        assertEquals(0.0, fieldVelocity.getX(), kTolerance);
+        assertEquals(2.0, fieldVelocity.getY(), kTolerance);
+    }
+
+    @Test
+    void compensatesTargetByRobotVelocityDuringShotFlight() {
+        Pose2d robotPose = new Pose2d(
+            2.0,
+            ScoringConstants.kBlueHubCenterMeters.getY(),
+            Rotation2d.kZero
+        );
+        ChassisSpeeds robotRelativeSpeeds = new ChassisSpeeds(0.0, 1.0, 0.0);
+        double shotTimeOfFlightSeconds = 0.8;
+
+        ScoringCalculator.ScoringTarget target = ScoringCalculator.calculateTarget(
+            robotPose,
+            robotRelativeSpeeds,
+            shotTimeOfFlightSeconds,
+            Alliance.Blue,
+            OptionalDouble.empty()
+        );
+        Translation2d expectedCompensatedPoint = new Translation2d(
+            ScoringConstants.kBlueHubCenterMeters.getX(),
+            ScoringConstants.kBlueHubCenterMeters.getY() - shotTimeOfFlightSeconds
+        );
+        double expectedFieldBearingDegrees = Math.toDegrees(Math.atan2(
+            expectedCompensatedPoint.getY() - target.turretFieldPoint().getY(),
+            expectedCompensatedPoint.getX() - target.turretFieldPoint().getX()
+        ));
+
+        assertEquals(
+            expectedCompensatedPoint.getX(),
+            target.compensatedFieldPoint().getX(),
+            kTolerance
+        );
+        assertEquals(
+            expectedCompensatedPoint.getY(),
+            target.compensatedFieldPoint().getY(),
+            kTolerance
+        );
+        assertEquals(
+            target.turretFieldPoint().getDistance(expectedCompensatedPoint),
+            target.distanceMeters(),
+            kTolerance
+        );
+        assertEquals(expectedFieldBearingDegrees, target.fieldBearingDegrees(), kTolerance);
     }
 
     @Test

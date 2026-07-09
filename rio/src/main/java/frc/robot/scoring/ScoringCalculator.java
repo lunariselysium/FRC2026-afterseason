@@ -10,6 +10,8 @@ import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
+import edu.wpi.first.math.geometry.Twist2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.Constants.ScoringConstants.ShotCurve;
@@ -34,6 +36,7 @@ public final class ScoringCalculator {
     public record ScoringTarget(
         TargetMode mode,
         Translation2d fieldPoint,
+        Translation2d compensatedFieldPoint,
         Translation2d turretFieldPoint,
         double distanceMeters,
         double fieldBearingDegrees,
@@ -45,49 +48,48 @@ public final class ScoringCalculator {
     public static ScoringTarget calculateTarget(
         Pose2d robotPose,
         Alliance alliance,
-        OptionalDouble hubYawDegrees
+        OptionalDouble hubVisionCorrectionDegrees
     ) {
-        return calculateTarget(robotPose, alliance, hubYawDegrees, OptionalDouble.empty());
+        return calculateTarget(
+            robotPose,
+            new ChassisSpeeds(0.0, 0.0, 0.0),
+            0.0,
+            alliance,
+            hubVisionCorrectionDegrees
+        );
     }
 
     public static ScoringTarget calculateTarget(
         Pose2d robotPose,
-        double currentTurretHeadingDegrees,
+        ChassisSpeeds robotRelativeSpeeds,
+        double shotTimeOfFlightSeconds,
         Alliance alliance,
-        OptionalDouble hubYawDegrees
-    ) {
-        return calculateTarget(
-            robotPose,
-            alliance,
-            hubYawDegrees,
-            OptionalDouble.of(currentTurretHeadingDegrees)
-        );
-    }
-
-    private static ScoringTarget calculateTarget(
-        Pose2d robotPose,
-        Alliance alliance,
-        OptionalDouble hubYawDegrees,
-        OptionalDouble currentTurretHeadingDegrees
+        OptionalDouble hubVisionCorrectionDegrees
     ) {
         boolean hubShot = isInOwnAllianceZone(robotPose.getTranslation(), alliance);
         Translation2d targetPoint = hubShot
             ? getHubCenter(alliance)
             : getNearestPassTarget(robotPose.getTranslation(), alliance);
         Translation2d turretFieldPoint = getTurretFieldPoint(robotPose);
-        double distanceMeters = turretFieldPoint.getDistance(targetPoint);
-        double fieldBearingDegrees = getFieldBearingDegrees(turretFieldPoint, targetPoint);
-        double visualTrimDegrees = hubShot ? getHubVisualTrimDegrees(hubYawDegrees) : 0.0;
+        Translation2d robotFieldVelocityMetersPerSecond =
+            getFieldRelativeVelocityMetersPerSecond(robotPose, robotRelativeSpeeds);
+        Translation2d compensatedTargetPoint = compensateTargetForRobotVelocity(
+            targetPoint,
+            robotFieldVelocityMetersPerSecond,
+            shotTimeOfFlightSeconds
+        );
+        double distanceMeters = turretFieldPoint.getDistance(compensatedTargetPoint);
+        double fieldBearingDegrees = getFieldBearingDegrees(turretFieldPoint, compensatedTargetPoint);
+        double visualTrimDegrees = hubShot
+            ? getHubVisualTrimDegrees(hubVisionCorrectionDegrees)
+            : 0.0;
         double poseBasedTurretHeadingDegrees = MathUtil.inputModulus(
             fieldBearingDegrees - robotPose.getRotation().getDegrees(),
             -180.0,
             180.0
         );
         double turretHeadingDegrees = MathUtil.inputModulus(
-            // Fresh camera yaw is a heading error, so servo from the measured turret heading.
-            shouldServoFromVision(hubShot, hubYawDegrees, currentTurretHeadingDegrees)
-                ? currentTurretHeadingDegrees.getAsDouble() + visualTrimDegrees
-                : poseBasedTurretHeadingDegrees + visualTrimDegrees,
+            poseBasedTurretHeadingDegrees + visualTrimDegrees,
             -180.0,
             180.0
         );
@@ -100,6 +102,7 @@ public final class ScoringCalculator {
         return new ScoringTarget(
             hubShot ? TargetMode.HUB : TargetMode.PASS,
             targetPoint,
+            compensatedTargetPoint,
             turretFieldPoint,
             distanceMeters,
             fieldBearingDegrees,
@@ -109,12 +112,59 @@ public final class ScoringCalculator {
         );
     }
 
-    private static boolean shouldServoFromVision(
-        boolean hubShot,
-        OptionalDouble hubYawDegrees,
-        OptionalDouble currentTurretHeadingDegrees
+    public static ScoringTarget calculateTarget(
+        Pose2d robotPose,
+        double currentTurretHeadingDegrees,
+        Alliance alliance,
+        OptionalDouble hubVisionCorrectionDegrees
     ) {
-        return hubShot && hubYawDegrees.isPresent() && currentTurretHeadingDegrees.isPresent();
+        // Preserve the previous call shape, but keep heading target selection pose-primary.
+        return calculateTarget(robotPose, alliance, hubVisionCorrectionDegrees);
+    }
+
+    public static Translation2d getFieldRelativeVelocityMetersPerSecond(
+        Pose2d robotPose,
+        ChassisSpeeds robotRelativeSpeeds
+    ) {
+        return new Translation2d(
+            robotRelativeSpeeds.vxMetersPerSecond,
+            robotRelativeSpeeds.vyMetersPerSecond
+        ).rotateBy(robotPose.getRotation());
+    }
+
+    public static Translation2d compensateTargetForRobotVelocity(
+        Translation2d targetPoint,
+        Translation2d robotFieldVelocityMetersPerSecond,
+        double shotTimeOfFlightSeconds
+    ) {
+        if (shotTimeOfFlightSeconds <= 0.0) {
+            return targetPoint;
+        }
+
+        return new Translation2d(
+            targetPoint.getX()
+                - robotFieldVelocityMetersPerSecond.getX() * shotTimeOfFlightSeconds,
+            targetPoint.getY()
+                - robotFieldVelocityMetersPerSecond.getY() * shotTimeOfFlightSeconds
+        );
+    }
+
+    public static Pose2d predictRobotPose(
+        Pose2d robotPose,
+        ChassisSpeeds robotRelativeSpeeds,
+        double predictionSeconds
+    ) {
+        if (predictionSeconds <= 0.0) {
+            return robotPose;
+        }
+
+        return robotPose.exp(
+            new Twist2d(
+                robotRelativeSpeeds.vxMetersPerSecond * predictionSeconds,
+                robotRelativeSpeeds.vyMetersPerSecond * predictionSeconds,
+                robotRelativeSpeeds.omegaRadiansPerSecond * predictionSeconds
+            )
+        );
     }
 
     public static boolean isInOwnAllianceZone(Translation2d robotPosition, Alliance alliance) {
@@ -158,20 +208,20 @@ public final class ScoringCalculator {
         return false;
     }
 
-    public static double getHubVisualTrimDegrees(OptionalDouble hubYawDegrees) {
-        if (hubYawDegrees.isEmpty()) {
+    public static double getHubVisualTrimDegrees(OptionalDouble hubVisionCorrectionDegrees) {
+        if (hubVisionCorrectionDegrees.isEmpty()) {
             return 0.0;
         }
 
-        double yawDegrees = hubYawDegrees.getAsDouble();
-        if (Math.abs(yawDegrees) <= ScoringConstants.kHubVisualTrimToleranceDegrees) {
+        double correctionDegrees = hubVisionCorrectionDegrees.getAsDouble();
+        if (Math.abs(correctionDegrees) <= ScoringConstants.kHubVisualTrimToleranceDegrees) {
             return 0.0;
         }
 
         return MathUtil.clamp(
             ScoringConstants.kHubVisualTrimYawSign
                 * ScoringConstants.kHubVisualTrimYawGain
-                * yawDegrees,
+                * correctionDegrees,
             -ScoringConstants.kHubVisualTrimMaxCorrectionDegrees,
             ScoringConstants.kHubVisualTrimMaxCorrectionDegrees
         );

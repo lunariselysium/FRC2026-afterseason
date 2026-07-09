@@ -162,6 +162,10 @@ public class Turret extends SubsystemBase {
         return flywheel.isAtTarget();
     }
 
+    public boolean isFlywheelReadyToShoot() {
+        return flywheel.isReadyToShoot();
+    }
+
     public boolean isAnySysIdActive() {
         return heading.isSysIdActive()
             || pitch.isSysIdActive()
@@ -174,6 +178,10 @@ public class Turret extends SubsystemBase {
 
     public double getTargetFlywheelVelocityRotationsPerSecond() {
         return flywheel.getTargetVelocityRotationsPerSecond();
+    }
+
+    public double getFlywheelFeedingLoadFeedforwardVolts() {
+        return flywheel.getAppliedFeedingLoadFeedforwardVolts();
     }
 
     public void runSerializer() {
@@ -216,7 +224,7 @@ public class Turret extends SubsystemBase {
     public void updateControlAndTelemetry() {
         heading.updateControl();
         pitch.updateControl();
-        flywheel.updateControl();
+        flywheel.updateControl(serializer.isRunning());
         serializer.updateControl();
 
         SmartDashboard.putString("Turret/HeadingStatus", heading.getStatus());
@@ -245,9 +253,14 @@ public class Turret extends SubsystemBase {
         SmartDashboard.putNumber("Turret/FlywheelTargetVelocityRps", flywheel.getTargetVelocityRotationsPerSecond());
         SmartDashboard.putNumber("Turret/FlywheelPositionRotations", flywheel.getPositionRotations());
         SmartDashboard.putNumber("Turret/FlywheelSysIdVoltage", flywheel.getAppliedSysIdVoltage());
+        SmartDashboard.putNumber(
+            "Turret/FlywheelFeedingLoadFeedforwardVolts",
+            flywheel.getAppliedFeedingLoadFeedforwardVolts()
+        );
         SmartDashboard.putNumber("Turret/FlywheelMeasuredVoltage", flywheel.getLeaderMotorVoltage());
         SmartDashboard.putNumber("Turret/FlywheelLeaderStatorCurrentAmps", flywheel.getLeaderStatorCurrentAmps());
         SmartDashboard.putBoolean("Turret/FlywheelAtTarget", flywheel.isAtTarget());
+        SmartDashboard.putBoolean("Turret/FlywheelReadyToShoot", flywheel.isReadyToShoot());
         SmartDashboard.putBoolean("Turret/FlywheelRunning", flywheel.isRunning());
         SmartDashboard.putBoolean("Turret/FlywheelSysIdActive", flywheel.isSysIdActive());
 

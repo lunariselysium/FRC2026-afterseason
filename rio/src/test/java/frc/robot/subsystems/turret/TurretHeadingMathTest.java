@@ -5,6 +5,8 @@
 package frc.robot.subsystems.turret;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +61,12 @@ class TurretHeadingMathTest {
             ),
             kTolerance
         );
+    }
+
+    @Test
+    void checksWhetherHeadingIsInsideRequestedTolerance() {
+        assertTrue(TurretHeadingMath.isWithinTolerance(10.0, 11.9, 2.0));
+        assertFalse(TurretHeadingMath.isWithinTolerance(10.0, 12.1, 2.0));
     }
 
     private static void assertNearestEquivalent(

@@ -113,8 +113,11 @@ public class TurretPitch {
 
     public boolean isAtTarget() {
         return homed
-            && Math.abs(targetPitchDegrees - getPitchDegrees())
-                <= TurretPitchConstants.kPitchToleranceDegrees;
+            && TurretPitchMath.isWithinTolerance(
+                targetPitchDegrees,
+                getPitchDegrees(),
+                TurretPitchConstants.kPitchReadyToleranceDegrees
+            );
     }
 
     public void stepTargetUp() {

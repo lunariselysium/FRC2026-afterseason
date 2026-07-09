@@ -70,6 +70,14 @@ final class TurretHeadingMath {
         return clamp(headingDegrees, minHeadingDegrees, maxHeadingDegrees);
     }
 
+    static boolean isWithinTolerance(
+        double targetHeadingDegrees,
+        double measuredHeadingDegrees,
+        double toleranceDegrees
+    ) {
+        return Math.abs(targetHeadingDegrees - measuredHeadingDegrees) <= toleranceDegrees;
+    }
+
     private static boolean isBetterCandidate(
         double candidateHeadingDegrees,
         double bestHeadingDegrees,

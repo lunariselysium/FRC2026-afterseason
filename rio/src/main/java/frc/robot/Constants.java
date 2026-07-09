@@ -19,7 +19,7 @@ public final class Constants {
 
         public static final AprilTagFields kAprilTagField = AprilTagFields.k2026RebuiltAndymark;
 
-        public static final boolean kEnableVisionPoseFusion = false;
+        public static final boolean kEnableVisionPoseFusion = true;
 
         public static final String kLeftFrameCameraName = "left-frame";
         public static final String kRightFrameCameraName = "right-frame";
@@ -36,8 +36,8 @@ public final class Constants {
          * +X forward, +Y left, +Z up. Camera rotations describe the camera frame
          * at its mounted pose; a forward-facing camera is Rotation3d.kZero.
          *
-         * Leave kEnableVisionPoseFusion false until these measurements are checked
-         * against the real robot and PhotonVision pose output.
+         * Set kEnableVisionPoseFusion false if these measurements need to be
+         * rechecked against the real robot and PhotonVision pose output.
          */
         public static final double kDrivetrainLengthMeters = millimetersToMeters(635.0);
         public static final double kDrivetrainWidthMeters = millimetersToMeters(736.0);
@@ -133,6 +133,19 @@ public final class Constants {
             double flywheelRotationsPerSecond
         ) {}
 
+        public enum ShotCurveType {
+            INTERPOLATED_MAP,
+            POLYNOMIAL
+        }
+
+        public record ShotCurve(
+            ShotCurveType pitchCurveType,
+            ShotCurveType flywheelCurveType,
+            ShotMapPoint[] shotMap,
+            double[] pitchPolynomialCoefficients,
+            double[] flywheelPolynomialCoefficients
+        ) {}
+
         public static final double kFieldLengthMeters = 16.518;
         public static final double kFieldWidthMeters = 8.043;
 
@@ -184,7 +197,7 @@ public final class Constants {
         public static final double kMinShotPitchDegrees = TurretPitchConstants.kMinPitchDegrees;
         public static final double kMaxShotPitchDegrees = TurretPitchConstants.kMaxPitchDegrees;
         public static final double kMinShotFlywheelRotationsPerSecond = 20.0;
-        public static final double kMaxShotFlywheelRotationsPerSecond = 45.0;
+        public static final double kMaxShotFlywheelRotationsPerSecond = 60.0;
 
         // Provisional maps only. Replace these rows with measured shots during calibration.
         public static final ShotMapPoint[] kHubShotMap = {
@@ -199,6 +212,20 @@ public final class Constants {
             new ShotMapPoint(7.00, 28.0, 38.0),
             new ShotMapPoint(9.00, 34.0, 42.0),
         };
+        public static final ShotCurve kHubShotCurve = new ShotCurve(
+            ShotCurveType.INTERPOLATED_MAP,
+            ShotCurveType.INTERPOLATED_MAP,
+            kHubShotMap,
+            new double[] {},
+            new double[] {}
+        );
+        public static final ShotCurve kPassShotCurve = new ShotCurve(
+            ShotCurveType.INTERPOLATED_MAP,
+            ShotCurveType.INTERPOLATED_MAP,
+            kPassShotMap,
+            new double[] {},
+            new double[] {}
+        );
     }
 
     public static final class MusicConstants {
@@ -325,7 +352,7 @@ public final class Constants {
 
         public static final double kMinPitchDegrees = 0.0;
         public static final double kMaxPitchDegrees = 35.0;
-        public static final double kTargetPitchStepDegrees = 35.0;
+        public static final double kTargetPitchStepDegrees = 5.0;
         public static final double kPitchToleranceDegrees = 0.5;
 
         public static final double kMaxPitchVelocityDegreesPerSecond = 600.0;
@@ -361,16 +388,16 @@ public final class Constants {
         public static final int kFollowerMotorCanId = 35;
         public static final String kMotorCanBus = "canivores";
 
-        public static final double kTargetVelocityRotationsPerSecond = 35.0;
+        public static final double kTargetVelocityRotationsPerSecond = 42.0;
         public static final double kVelocityToleranceRotationsPerSecond = 2.0;
-        public static final double kFlywheelKp = 0.15227;
+        public static final double kFlywheelKp = 0.15;
         public static final double kFlywheelKv = 0.11285;
         public static final double kFlywheelKa = 0.0028782;
         public static final double kFlywheelKs = 0.10952;
         public static final double kMotionMagicAccelerationRotationsPerSecondSquared = 70.0;
         public static final double kMotionMagicJerkRotationsPerSecondCubed = 700.0;
-        public static final double kSupplyCurrentLimitAmps = 35.0;
-        public static final double kStatorCurrentLimitAmps = 60.0;
+        public static final double kSupplyCurrentLimitAmps = 40.0;
+        public static final double kStatorCurrentLimitAmps = 80.0;
         public static final double kSysIdQuasistaticRampRateVoltsPerSecond = 0.50;
         public static final double kSysIdDynamicStepVolts = 4.0;
         public static final double kSysIdTimeoutSeconds = 10.0;
@@ -399,8 +426,8 @@ public final class Constants {
         public static final int kBeltFollowerMotorCanId = 24;
         public static final String kMotorCanBus = "canivores";
 
-        public static final double kFloorMotorOutput = 0.08;
-        public static final double kBeltMotorOutput = 0.32;
+        public static final double kFloorMotorOutput = 0.95;
+        public static final double kBeltMotorOutput = 0.48;
         public static final double kHandoffWheelMotorOutput = 0.32;
 
         public static final double kFloorMotorOutputSign = 1.0;
@@ -418,6 +445,8 @@ public final class Constants {
         public static final int kDeployMotorCanId = 11;
         public static final int kLeftRollerMotorCanId = 12;
         public static final int kRightRollerMotorCanId = 13;
+        // Set true if the left roller motor is reinstalled as a follower.
+        public static final boolean kLeftRollerMotorPresent = false;
         public static final String kMotorCanBus = "canivores";
 
         public static final double kMotorPulleyTeeth = 18.0;
@@ -458,11 +487,12 @@ public final class Constants {
         public static final double kSysIdDynamicStepVolts = 2.0;
         public static final double kSysIdTimeoutSeconds = 10.0;
 
-        public static final double kRollerMotorOutput = 0.1;
-        public static final double kRollerMotorOutputSign = 1.0;
+        public static final double kRollerMotorOutput = 0.7;
+        // Preserves the previous right-follower direction now that the right roller is the lead.
+        public static final double kRightRollerMotorOutputSign = -1.0;
         public static final double kRollerSupplyCurrentLimitAmps = 25.0;
         public static final double kRollerStatorCurrentLimitAmps = 40.0;
 
-        public static final boolean kRightRollerOpposesLeft = true;
+        public static final boolean kLeftRollerOpposesRight = true;
     }
 }

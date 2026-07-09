@@ -64,6 +64,7 @@ public class ScoreCommand extends Command {
         OptionalDouble hubYawDegrees = vision.getTurretForwardHubYawDegrees(alliance.get());
         ScoringTarget target = ScoringCalculator.calculateTarget(
             robotPose,
+            turret.getHeadingDegrees(),
             alliance.get(),
             hubYawDegrees
         );
@@ -123,6 +124,8 @@ public class ScoreCommand extends Command {
         SmartDashboard.putString("Scoring/TargetMode", target.mode().name());
         SmartDashboard.putNumber("Scoring/TargetX", target.fieldPoint().getX());
         SmartDashboard.putNumber("Scoring/TargetY", target.fieldPoint().getY());
+        SmartDashboard.putNumber("Scoring/TurretFieldX", target.turretFieldPoint().getX());
+        SmartDashboard.putNumber("Scoring/TurretFieldY", target.turretFieldPoint().getY());
         SmartDashboard.putNumber("Scoring/DistanceMeters", target.distanceMeters());
         SmartDashboard.putNumber("Scoring/FieldBearingDegrees", target.fieldBearingDegrees());
         SmartDashboard.putNumber("Scoring/TurretHeadingDegrees", target.turretHeadingDegrees());

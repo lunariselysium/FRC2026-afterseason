@@ -1,0 +1,1549 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shooting Curve Tuner</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f2;
+      --surface: #ffffff;
+      --surface-strong: #edf2ed;
+      --ink: #172027;
+      --muted: #65727a;
+      --line: #d7ded7;
+      --accent: #167c5c;
+      --accent-strong: #0f5f46;
+      --accent-soft: #dcefe7;
+      --orange: #b75c2f;
+      --red: #af3745;
+      --blue: #346b9a;
+      --shadow: 0 12px 28px rgba(31, 45, 37, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.35;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--ink);
+      min-height: 38px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    button.primary:hover {
+      background: var(--accent-strong);
+      border-color: var(--accent-strong);
+    }
+
+    button.danger {
+      color: var(--red);
+      border-color: #e5b8bf;
+    }
+
+    button.tab {
+      border-radius: 0;
+      border-color: transparent;
+      background: transparent;
+      color: var(--muted);
+      min-height: 34px;
+      padding: 0 14px;
+      font-weight: 700;
+    }
+
+    button.tab.active {
+      background: var(--surface);
+      color: var(--accent-strong);
+      border-color: var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--ink);
+      min-height: 38px;
+      padding: 8px 10px;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus,
+    button:focus-visible {
+      outline: 3px solid rgba(22, 124, 92, 0.20);
+      outline-offset: 2px;
+      border-color: var(--accent);
+    }
+
+    textarea {
+      min-height: 132px;
+      resize: vertical;
+      font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px clamp(16px, 3vw, 32px);
+      background: #eef3ef;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1,
+    h2 {
+      margin: 0;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      font-size: clamp(22px, 3vw, 34px);
+      line-height: 1.05;
+    }
+
+    h2 {
+      font-size: 15px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .segmented {
+      display: inline-flex;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-strong);
+    }
+
+    .segmented button {
+      border-width: 0 1px 0 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      min-width: 70px;
+      font-weight: 700;
+    }
+
+    .segmented button:last-child {
+      border-right-width: 0;
+    }
+
+    .segmented button.active {
+      background: var(--surface);
+      color: var(--accent-strong);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+      gap: 16px;
+      padding: 16px clamp(16px, 3vw, 32px) 28px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .control-panel {
+      position: sticky;
+      top: 16px;
+      padding: 16px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .button-row button {
+      flex: 1 1 auto;
+    }
+
+    .status-line {
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .chart-panel {
+      padding: 14px;
+      min-height: 286px;
+    }
+
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .chart-head span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 230px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcf9;
+    }
+
+    .table-panel {
+      overflow: hidden;
+    }
+
+    .table-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      color: var(--muted);
+      background: #f8faf7;
+      font-size: 12px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    td input,
+    td select {
+      min-height: 34px;
+      padding: 6px 8px;
+    }
+
+    td.notes {
+      min-width: 180px;
+    }
+
+    .mini {
+      min-height: 32px;
+      padding: 0 9px;
+      white-space: nowrap;
+    }
+
+    .result-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+      background: var(--blue);
+      vertical-align: -1px;
+    }
+
+    .result-good .result-dot {
+      background: var(--accent);
+    }
+
+    .result-short .result-dot,
+    .result-long .result-dot {
+      background: var(--orange);
+    }
+
+    .result-bad .result-dot {
+      background: var(--red);
+    }
+
+    .output-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .output-panel {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .output-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .import-panel {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    @media (max-width: 980px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .control-panel {
+        position: static;
+      }
+
+      .chart-grid,
+      .output-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .top-actions,
+      .row,
+      .table-toolbar,
+      .output-head {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .segmented {
+        width: 100%;
+      }
+
+      .segmented button {
+        flex: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Shooting Curve Tuner</h1>
+    <div class="top-actions">
+      <div class="segmented" aria-label="Shot map">
+        <button type="button" class="active" data-mode="hub">Hub</button>
+        <button type="button" data-mode="pass">Pass</button>
+      </div>
+      <div class="segmented" aria-label="Distance units">
+        <button type="button" class="active" data-unit="m">Meters</button>
+        <button type="button" data-unit="ft">Feet</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <aside class="panel control-panel">
+      <form id="point-form" class="stack">
+        <h2>Point</h2>
+        <div class="row">
+          <label>
+            Distance
+            <input id="distance-input" type="number" min="0" step="0.01" required>
+          </label>
+          <label>
+            Pitch deg
+            <input id="pitch-input" type="number" min="0" max="35" step="0.1" required>
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            Flywheel RPS
+            <input id="rps-input" type="number" min="0" step="0.1" required>
+          </label>
+          <label>
+            Flywheel RPM
+            <input id="rpm-input" type="number" min="0" step="10">
+          </label>
+        </div>
+        <label>
+          Result
+          <select id="result-input">
+            <option value="unknown">Unknown</option>
+            <option value="good">Good</option>
+            <option value="short">Short</option>
+            <option value="long">Long</option>
+            <option value="bad">Bad</option>
+          </select>
+        </label>
+        <label>
+          Notes
+          <input id="notes-input" type="text" maxlength="80" placeholder="Optional">
+        </label>
+        <div class="button-row">
+          <button type="submit" class="primary" id="add-button">Add Row</button>
+          <button type="button" id="clear-form-button">Clear</button>
+        </div>
+        <div class="button-row">
+          <button type="button" id="sort-button">Sort</button>
+          <button type="button" id="reset-button" class="danger">Reset Map</button>
+        </div>
+        <h2>Fit</h2>
+        <div class="row">
+          <label>
+            Pitch model
+            <select id="pitch-model-input">
+              <option value="interpolation">Interpolation</option>
+              <option value="linear">Linear</option>
+              <option value="quadratic">Quadratic</option>
+              <option value="cubic">Cubic</option>
+            </select>
+          </label>
+          <label>
+            Flywheel model
+            <select id="flywheel-model-input">
+              <option value="interpolation">Interpolation</option>
+              <option value="linear">Linear</option>
+              <option value="quadratic">Quadratic</option>
+              <option value="cubic">Cubic</option>
+            </select>
+          </label>
+        </div>
+        <div class="status-line" id="fit-summary">Interpolation</div>
+        <div class="status-line" id="status-line">Ready</div>
+      </form>
+    </aside>
+
+    <section class="workspace">
+      <div class="chart-grid">
+        <section class="panel chart-panel">
+          <div class="chart-head">
+            <h2>Pitch Curve</h2>
+            <span id="pitch-range"></span>
+          </div>
+          <canvas id="pitch-chart" width="900" height="460"></canvas>
+        </section>
+        <section class="panel chart-panel">
+          <div class="chart-head">
+            <h2>Flywheel Curve</h2>
+            <span id="flywheel-range"></span>
+          </div>
+          <canvas id="flywheel-chart" width="900" height="460"></canvas>
+        </section>
+      </div>
+
+      <section class="panel table-panel">
+        <div class="table-toolbar">
+          <h2 id="table-title">Hub Points</h2>
+          <div class="button-row">
+            <button type="button" id="copy-java-button">Copy Java</button>
+            <button type="button" id="copy-csv-button">Copy CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Distance</th>
+                <th>Pitch deg</th>
+                <th>RPS</th>
+                <th>RPM</th>
+                <th>Result</th>
+                <th>Notes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="points-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="output-grid">
+        <section class="panel output-panel">
+          <div class="output-head">
+            <h2>Java Constants</h2>
+            <button type="button" class="mini" data-copy-target="java-output">Copy</button>
+          </div>
+          <textarea id="java-output" readonly></textarea>
+        </section>
+        <section class="panel output-panel">
+          <div class="output-head">
+            <h2>CSV</h2>
+            <button type="button" class="mini" data-copy-target="csv-output">Copy</button>
+          </div>
+          <textarea id="csv-output" readonly></textarea>
+        </section>
+      </div>
+
+      <section class="panel import-panel">
+        <div class="output-head">
+          <h2>Import</h2>
+          <button type="button" id="import-button">Import Into Current Map</button>
+        </div>
+        <textarea id="import-input" placeholder="Paste ShotMapPoint rows or CSV"></textarea>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const metersToFeet = 3.280839895;
+    const storageKey = "frc2026-shooting-curve-tuner-v1";
+    const modelOptions = {
+      interpolation: { label: "Interpolation", degree: 0 },
+      linear: { label: "Linear", degree: 1 },
+      quadratic: { label: "Quadratic", degree: 2 },
+      cubic: { label: "Cubic", degree: 3 }
+    };
+
+    const defaultMaps = {
+      hub: [
+        point(1.50, 18.0, 31.0),
+        point(2.50, 24.0, 33.0),
+        point(3.50, 30.0, 35.0),
+        point(4.50, 35.0, 37.0)
+      ],
+      pass: [
+        point(3.00, 16.0, 30.0),
+        point(5.00, 22.0, 34.0),
+        point(7.00, 28.0, 38.0),
+        point(9.00, 34.0, 42.0)
+      ]
+    };
+    const defaultFits = {
+      hub: { pitch: "interpolation", flywheel: "interpolation" },
+      pass: { pitch: "interpolation", flywheel: "interpolation" }
+    };
+
+    const state = loadState();
+
+    const elements = {
+      modeButtons: [...document.querySelectorAll("[data-mode]")],
+      unitButtons: [...document.querySelectorAll("[data-unit]")],
+      form: document.getElementById("point-form"),
+      distance: document.getElementById("distance-input"),
+      pitch: document.getElementById("pitch-input"),
+      rps: document.getElementById("rps-input"),
+      rpm: document.getElementById("rpm-input"),
+      result: document.getElementById("result-input"),
+      notes: document.getElementById("notes-input"),
+      pitchModel: document.getElementById("pitch-model-input"),
+      flywheelModel: document.getElementById("flywheel-model-input"),
+      fitSummary: document.getElementById("fit-summary"),
+      clearForm: document.getElementById("clear-form-button"),
+      sort: document.getElementById("sort-button"),
+      reset: document.getElementById("reset-button"),
+      status: document.getElementById("status-line"),
+      tableTitle: document.getElementById("table-title"),
+      body: document.getElementById("points-body"),
+      pitchChart: document.getElementById("pitch-chart"),
+      flywheelChart: document.getElementById("flywheel-chart"),
+      pitchRange: document.getElementById("pitch-range"),
+      flywheelRange: document.getElementById("flywheel-range"),
+      javaOutput: document.getElementById("java-output"),
+      csvOutput: document.getElementById("csv-output"),
+      copyJava: document.getElementById("copy-java-button"),
+      copyCsv: document.getElementById("copy-csv-button"),
+      importInput: document.getElementById("import-input"),
+      importButton: document.getElementById("import-button")
+    };
+
+    bindEvents();
+    clearForm();
+    render();
+
+    function point(distanceMeters, pitchDegrees, flywheelRps, result = "unknown", notes = "") {
+      return {
+        id: makeId(),
+        distanceMeters,
+        pitchDegrees,
+        flywheelRps,
+        result,
+        notes
+      };
+    }
+
+    function makeId() {
+      return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    }
+
+    function loadState() {
+      const fallback = {
+        mode: "hub",
+        unit: "m",
+        maps: cloneMaps(defaultMaps),
+        fits: cloneFits(defaultFits)
+      };
+
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) {
+          return fallback;
+        }
+
+        const parsed = JSON.parse(raw);
+        return {
+          mode: parsed.mode === "pass" ? "pass" : "hub",
+          unit: parsed.unit === "ft" ? "ft" : "m",
+          maps: {
+            hub: normalizeRows(parsed.maps && parsed.maps.hub, defaultMaps.hub),
+            pass: normalizeRows(parsed.maps && parsed.maps.pass, defaultMaps.pass)
+          },
+          fits: normalizeFits(parsed.fits)
+        };
+      } catch (error) {
+        return fallback;
+      }
+    }
+
+    function cloneMaps(maps) {
+      return {
+        hub: maps.hub.map((row) => ({ ...row, id: makeId() })),
+        pass: maps.pass.map((row) => ({ ...row, id: makeId() }))
+      };
+    }
+
+    function cloneFits(fits) {
+      return {
+        hub: { ...fits.hub },
+        pass: { ...fits.pass }
+      };
+    }
+
+    function normalizeRows(rows, fallbackRows) {
+      const source = Array.isArray(rows) && rows.length > 0 ? rows : fallbackRows;
+      return source
+        .map((row) => point(
+          numberOr(row.distanceMeters, 0),
+          numberOr(row.pitchDegrees, 0),
+          numberOr(row.flywheelRps, 0),
+          validResult(row.result),
+          String(row.notes || "")
+        ))
+        .sort(sortByDistance);
+    }
+
+    function normalizeFits(fits) {
+      const normalized = cloneFits(defaultFits);
+      ["hub", "pass"].forEach((mode) => {
+        if (!fits || !fits[mode]) {
+          return;
+        }
+
+        normalized[mode].pitch = validModel(fits[mode].pitch);
+        normalized[mode].flywheel = validModel(fits[mode].flywheel);
+      });
+
+      return normalized;
+    }
+
+    function saveState() {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    function bindEvents() {
+      elements.modeButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          state.mode = button.dataset.mode;
+          clearForm();
+          render();
+          saveState();
+        });
+      });
+
+      elements.unitButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          state.unit = button.dataset.unit;
+          render();
+          saveState();
+        });
+      });
+
+      elements.form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        addFormPoint();
+      });
+
+      elements.rps.addEventListener("input", () => {
+        const rps = parseFloat(elements.rps.value);
+        if (Number.isFinite(rps)) {
+          elements.rpm.value = format(rps * 60.0, 0);
+        }
+      });
+
+      elements.rpm.addEventListener("input", () => {
+        const rpm = parseFloat(elements.rpm.value);
+        if (Number.isFinite(rpm)) {
+          elements.rps.value = format(rpm / 60.0, 2);
+        }
+      });
+
+      elements.pitchModel.addEventListener("change", () => {
+        currentFits().pitch = validModel(elements.pitchModel.value);
+        setStatus("Updated pitch fit");
+        render();
+        saveState();
+      });
+
+      elements.flywheelModel.addEventListener("change", () => {
+        currentFits().flywheel = validModel(elements.flywheelModel.value);
+        setStatus("Updated flywheel fit");
+        render();
+        saveState();
+      });
+
+      elements.clearForm.addEventListener("click", clearForm);
+      elements.sort.addEventListener("click", () => {
+        currentRows().sort(sortByDistance);
+        setStatus("Sorted");
+        render();
+        saveState();
+      });
+      elements.reset.addEventListener("click", () => {
+        state.maps[state.mode] = cloneMaps(defaultMaps)[state.mode];
+        setStatus("Reset " + state.mode.toUpperCase());
+        clearForm();
+        render();
+        saveState();
+      });
+
+      elements.body.addEventListener("input", handleTableInput);
+      elements.body.addEventListener("click", handleTableClick);
+      elements.copyJava.addEventListener("click", () => copyText(elements.javaOutput.value, "Copied Java"));
+      elements.copyCsv.addEventListener("click", () => copyText(elements.csvOutput.value, "Copied CSV"));
+      document.querySelectorAll("[data-copy-target]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const target = document.getElementById(button.dataset.copyTarget);
+          copyText(target.value, "Copied");
+        });
+      });
+      elements.importButton.addEventListener("click", importRows);
+    }
+
+    function addFormPoint() {
+      const distanceInput = parseFloat(elements.distance.value);
+      const pitchDegrees = parseFloat(elements.pitch.value);
+      const flywheelRps = parseFloat(elements.rps.value);
+
+      if (!Number.isFinite(distanceInput) || !Number.isFinite(pitchDegrees) || !Number.isFinite(flywheelRps)) {
+        setStatus("Missing numeric value");
+        return;
+      }
+
+      const distanceMeters = state.unit === "ft" ? distanceInput / metersToFeet : distanceInput;
+      currentRows().push(point(
+        clamp(distanceMeters, 0, 30),
+        clamp(pitchDegrees, 0, 90),
+        clamp(flywheelRps, 0, 120),
+        validResult(elements.result.value),
+        elements.notes.value.trim()
+      ));
+      currentRows().sort(sortByDistance);
+      setStatus("Added row");
+      clearForm();
+      render();
+      saveState();
+    }
+
+    function handleTableInput(event) {
+      const input = event.target;
+      const rowId = input.closest("tr") && input.closest("tr").dataset.id;
+      const row = currentRows().find((item) => item.id === rowId);
+      if (!row) {
+        return;
+      }
+
+      if (input.dataset.field === "distance") {
+        const displayed = parseFloat(input.value);
+        if (Number.isFinite(displayed)) {
+          row.distanceMeters = state.unit === "ft" ? displayed / metersToFeet : displayed;
+        }
+      } else if (input.dataset.field === "pitch") {
+        row.pitchDegrees = numberOr(parseFloat(input.value), row.pitchDegrees);
+      } else if (input.dataset.field === "rps") {
+        row.flywheelRps = numberOr(parseFloat(input.value), row.flywheelRps);
+      } else if (input.dataset.field === "rpm") {
+        const rpm = parseFloat(input.value);
+        if (Number.isFinite(rpm)) {
+          row.flywheelRps = rpm / 60.0;
+        }
+      } else if (input.dataset.field === "result") {
+        row.result = validResult(input.value);
+      } else if (input.dataset.field === "notes") {
+        row.notes = input.value;
+      }
+
+      renderOutputs();
+      drawCharts();
+      saveState();
+    }
+
+    function handleTableClick(event) {
+      const button = event.target.closest("button");
+      if (!button) {
+        return;
+      }
+
+      const row = currentRows().find((item) => item.id === button.closest("tr").dataset.id);
+      if (!row) {
+        return;
+      }
+
+      if (button.dataset.action === "use") {
+        elements.distance.value = format(displayDistance(row.distanceMeters), 2);
+        elements.pitch.value = format(row.pitchDegrees, 1);
+        elements.rps.value = format(row.flywheelRps, 2);
+        elements.rpm.value = format(row.flywheelRps * 60.0, 0);
+        elements.result.value = row.result;
+        elements.notes.value = row.notes || "";
+        setStatus("Loaded row");
+      }
+
+      if (button.dataset.action === "duplicate") {
+        currentRows().push(point(
+          row.distanceMeters,
+          row.pitchDegrees,
+          row.flywheelRps,
+          row.result,
+          row.notes
+        ));
+        currentRows().sort(sortByDistance);
+        setStatus("Duplicated row");
+        render();
+        saveState();
+      }
+
+      if (button.dataset.action === "delete") {
+        state.maps[state.mode] = currentRows().filter((item) => item.id !== row.id);
+        setStatus("Deleted row");
+        render();
+        saveState();
+      }
+    }
+
+    function importRows() {
+      const text = elements.importInput.value.trim();
+      if (!text) {
+        setStatus("Nothing to import");
+        return;
+      }
+
+      const imported = parseJavaRows(text);
+      const rows = imported.length > 0 ? imported : parseCsvRows(text);
+      if (rows.length === 0) {
+        setStatus("Import found no rows");
+        return;
+      }
+
+      state.maps[state.mode] = rows.sort(sortByDistance);
+      elements.importInput.value = "";
+      setStatus("Imported " + rows.length + " rows");
+      clearForm();
+      render();
+      saveState();
+    }
+
+    function parseJavaRows(text) {
+      const rows = [];
+      const pattern = /new\s+ShotMapPoint\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)/g;
+      let match = pattern.exec(text);
+      while (match) {
+        rows.push(point(
+          parseFloat(match[1]),
+          parseFloat(match[2]),
+          parseFloat(match[3])
+        ));
+        match = pattern.exec(text);
+      }
+      return rows;
+    }
+
+    function parseCsvRows(text) {
+      const rows = [];
+      text.split(/\r?\n/).forEach((line, index) => {
+        const parts = parseCsvLine(line);
+        if (parts.length < 3) {
+          return;
+        }
+
+        if (index === 0 && /distance/i.test(parts[0])) {
+          return;
+        }
+
+        const fullExport = parts.length >= 5;
+        const distanceMeters = parseFloat(parts[0]);
+        const pitchDegrees = parseFloat(fullExport ? parts[2] : parts[1]);
+        const flywheelRps = parseFloat(fullExport ? parts[3] : parts[2]);
+        if (Number.isFinite(distanceMeters) && Number.isFinite(pitchDegrees) && Number.isFinite(flywheelRps)) {
+          rows.push(point(
+            distanceMeters,
+            pitchDegrees,
+            flywheelRps,
+            validResult(parts[5]),
+            parts[6] || ""
+          ));
+        }
+      });
+      return rows;
+    }
+
+    function parseCsvLine(line) {
+      const output = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const next = line[i + 1];
+        if (char === '"' && next === '"') {
+          current += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === "," && !inQuotes) {
+          output.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      output.push(current.trim());
+      return output;
+    }
+
+    function clearForm() {
+      const last = currentRows()[currentRows().length - 1];
+      elements.distance.value = last ? format(displayDistance(last.distanceMeters), 2) : "";
+      elements.pitch.value = last ? format(last.pitchDegrees, 1) : "";
+      elements.rps.value = last ? format(last.flywheelRps, 2) : "";
+      elements.rpm.value = last ? format(last.flywheelRps * 60.0, 0) : "";
+      elements.result.value = "unknown";
+      elements.notes.value = "";
+    }
+
+    function render() {
+      elements.modeButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.mode === state.mode);
+      });
+      elements.unitButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.unit === state.unit);
+      });
+      elements.pitchModel.value = currentFits().pitch;
+      elements.flywheelModel.value = currentFits().flywheel;
+
+      elements.tableTitle.textContent = state.mode === "hub" ? "Hub Points" : "Pass Points";
+      renderTable();
+      renderOutputs();
+      drawCharts();
+      renderFitSummary();
+    }
+
+    function renderTable() {
+      elements.body.innerHTML = "";
+      currentRows().forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.dataset.id = row.id;
+        tr.className = "result-" + validResult(row.result);
+        tr.innerHTML = `
+          <td><input data-field="distance" type="number" min="0" step="0.01" value="${escapeAttr(format(displayDistance(row.distanceMeters), 2))}"></td>
+          <td><input data-field="pitch" type="number" min="0" max="90" step="0.1" value="${escapeAttr(format(row.pitchDegrees, 1))}"></td>
+          <td><input data-field="rps" type="number" min="0" step="0.1" value="${escapeAttr(format(row.flywheelRps, 2))}"></td>
+          <td><input data-field="rpm" type="number" min="0" step="10" value="${escapeAttr(format(row.flywheelRps * 60.0, 0))}"></td>
+          <td>
+            <select data-field="result">
+              ${resultOptions(row.result)}
+            </select>
+          </td>
+          <td class="notes"><input data-field="notes" type="text" maxlength="80" value="${escapeAttr(row.notes || "")}"></td>
+          <td>
+            <button type="button" class="mini" data-action="use">Use</button>
+            <button type="button" class="mini" data-action="duplicate">Copy</button>
+            <button type="button" class="mini danger" data-action="delete">Delete</button>
+          </td>
+        `;
+        elements.body.appendChild(tr);
+      });
+    }
+
+    function resultOptions(selected) {
+      return ["unknown", "good", "short", "long", "bad"]
+        .map((value) => `<option value="${value}"${value === selected ? " selected" : ""}>${capitalize(value)}</option>`)
+        .join("");
+    }
+
+    function renderOutputs() {
+      elements.javaOutput.value = toJava(currentRows(), state.mode);
+      elements.csvOutput.value = toCsv(currentRows());
+    }
+
+    function renderFitSummary() {
+      const pitchFit = getFit(currentRows(), "pitchDegrees");
+      const flywheelFit = getFit(currentRows(), "flywheelRps");
+      elements.fitSummary.textContent =
+        "Pitch " + fitSummaryText(pitchFit, "deg")
+        + " | Flywheel " + fitSummaryText(flywheelFit, "rps");
+    }
+
+    function toJava(rows, mode) {
+      const constantName = mode === "hub" ? "kHubShotMap" : "kPassShotMap";
+      const curveName = mode === "hub" ? "kHubShotCurve" : "kPassShotCurve";
+      const pitchFit = getFit(rows, "pitchDegrees");
+      const flywheelFit = getFit(rows, "flywheelRps");
+      const lines = rows
+        .slice()
+        .sort(sortByDistance)
+        .map((row) => `            new ShotMapPoint(${format(row.distanceMeters, 2)}, ${format(row.pitchDegrees, 1)}, ${format(row.flywheelRps, 1)}),`);
+      return `        public static final ShotMapPoint[] ${constantName} = {\n${lines.join("\n")}\n        };\n`
+        + `        public static final ShotCurve ${curveName} = new ShotCurve(\n`
+        + `            ${javaCurveType(pitchFit)},\n`
+        + `            ${javaCurveType(flywheelFit)},\n`
+        + `            ${constantName},\n`
+        + `            ${javaCoefficientArray(pitchFit)},\n`
+        + `            ${javaCoefficientArray(flywheelFit)}\n`
+        + `        );`;
+    }
+
+    function toCsv(rows) {
+      const header = "distanceMeters,distanceFeet,pitchDegrees,flywheelRps,flywheelRpm,result,notes";
+      const lines = rows
+        .slice()
+        .sort(sortByDistance)
+        .map((row) => [
+          format(row.distanceMeters, 3),
+          format(row.distanceMeters * metersToFeet, 3),
+          format(row.pitchDegrees, 2),
+          format(row.flywheelRps, 3),
+          format(row.flywheelRps * 60.0, 1),
+          row.result,
+          row.notes || ""
+        ].map(csvCell).join(","));
+      return [header, ...lines].join("\n");
+    }
+
+    function drawCharts() {
+      drawChart(
+        elements.pitchChart,
+        currentRows(),
+        "pitchDegrees",
+        "Pitch deg",
+        elements.pitchRange
+      );
+      drawChart(
+        elements.flywheelChart,
+        currentRows(),
+        "flywheelRps",
+        "Flywheel RPS",
+        elements.flywheelRange
+      );
+    }
+
+    function drawChart(canvas, rows, field, label, rangeElement) {
+      const rect = canvas.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * scale));
+      canvas.height = Math.max(1, Math.floor(rect.height * scale));
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      const width = rect.width;
+      const height = rect.height;
+      const pad = { left: 52, right: 18, top: 18, bottom: 42 };
+      const plotWidth = width - pad.left - pad.right;
+      const plotHeight = height - pad.top - pad.bottom;
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "#fbfcf9";
+      ctx.fillRect(0, 0, width, height);
+
+      if (rows.length === 0) {
+        ctx.fillStyle = "#65727a";
+        ctx.fillText("No rows", pad.left, pad.top + 20);
+        rangeElement.textContent = "";
+        return;
+      }
+
+      const sorted = rows.slice().sort(sortByDistance);
+      const fit = getFit(rows, field);
+      const distances = sorted.map((row) => row.distanceMeters);
+      const xMin = Math.min(...distances);
+      const xMax = Math.max(...distances);
+      const curveSamples = sampleCurve(sorted, field, fit, xMin, xMax);
+      const values = sorted.map((row) => row[field]).concat(curveSamples.map((sample) => sample.value));
+      const yMinRaw = Math.min(...values);
+      const yMaxRaw = Math.max(...values);
+      const yPad = Math.max(1, (yMaxRaw - yMinRaw) * 0.18);
+      const yMin = Math.max(0, yMinRaw - yPad);
+      const yMax = yMaxRaw + yPad;
+
+      rangeElement.textContent = fitSummaryText(fit, field === "pitchDegrees" ? "deg" : "rps");
+      ctx.strokeStyle = "#d7ded7";
+      ctx.lineWidth = 1;
+      ctx.fillStyle = "#65727a";
+      ctx.font = "12px system-ui, sans-serif";
+
+      for (let i = 0; i <= 4; i++) {
+        const t = i / 4;
+        const y = pad.top + plotHeight * t;
+        const value = yMax - (yMax - yMin) * t;
+        line(ctx, pad.left, y, pad.left + plotWidth, y);
+        ctx.fillText(format(value, 1), 8, y + 4);
+      }
+
+      for (let i = 0; i <= 4; i++) {
+        const t = i / 4;
+        const x = pad.left + plotWidth * t;
+        const valueMeters = xMin + (xMax - xMin || 1) * t;
+        const displayed = displayDistance(valueMeters);
+        line(ctx, x, pad.top, x, pad.top + plotHeight);
+        ctx.fillText(format(displayed, 1), x - 10, height - 16);
+      }
+
+      ctx.fillText((state.unit === "ft" ? "feet" : "meters"), pad.left + plotWidth - 34, height - 16);
+      ctx.save();
+      ctx.translate(14, pad.top + plotHeight / 2 + 28);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+
+      ctx.strokeStyle = "#172027";
+      ctx.lineWidth = 1.5;
+      line(ctx, pad.left, pad.top, pad.left, pad.top + plotHeight);
+      line(ctx, pad.left, pad.top + plotHeight, pad.left + plotWidth, pad.top + plotHeight);
+
+      if (curveSamples.length > 1) {
+        ctx.beginPath();
+        curveSamples.forEach((sample, index) => {
+          const x = scaleX(sample.distanceMeters);
+          const y = scaleY(sample.value);
+          if (index === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.strokeStyle = field === "pitchDegrees" ? "#167c5c" : "#b75c2f";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash(fit.model === "interpolation" ? [] : [8, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      sorted.forEach((row) => {
+        const x = scaleX(row.distanceMeters);
+        const y = scaleY(row[field]);
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = resultColor(row.result);
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+
+      function scaleX(distanceMeters) {
+        return pad.left + ((distanceMeters - xMin) / (xMax - xMin || 1)) * plotWidth;
+      }
+
+      function scaleY(value) {
+        return pad.top + (1 - (value - yMin) / (yMax - yMin || 1)) * plotHeight;
+      }
+    }
+
+    function getFit(rows, field) {
+      const model = field === "pitchDegrees"
+        ? currentFits().pitch
+        : currentFits().flywheel;
+      if (model === "interpolation") {
+        return {
+          model,
+          degree: 0,
+          requestedDegree: 0,
+          coefficients: [],
+          rmse: 0,
+          valid: true
+        };
+      }
+
+      const requestedDegree = modelOptions[model].degree;
+      const points = rows
+        .filter((row) => Number.isFinite(row.distanceMeters) && Number.isFinite(row[field]))
+        .sort(sortByDistance);
+      const degree = Math.min(requestedDegree, points.length - 1);
+      if (degree < 1) {
+        return {
+          model,
+          degree: 0,
+          requestedDegree,
+          coefficients: [],
+          rmse: NaN,
+          valid: false
+        };
+      }
+
+      const coefficients = fitPolynomial(points, field, degree);
+      if (!coefficients) {
+        return {
+          model,
+          degree: 0,
+          requestedDegree,
+          coefficients: [],
+          rmse: NaN,
+          valid: false
+        };
+      }
+
+      return {
+        model,
+        degree,
+        requestedDegree,
+        coefficients,
+        rmse: getRmse(points, field, coefficients),
+        valid: true
+      };
+    }
+
+    function fitPolynomial(points, field, degree) {
+      const size = degree + 1;
+      const matrix = Array.from({ length: size }, () => Array(size).fill(0));
+      const rhs = Array(size).fill(0);
+
+      points.forEach((point) => {
+        const powers = [1];
+        for (let i = 1; i <= degree * 2; i++) {
+          powers[i] = powers[i - 1] * point.distanceMeters;
+        }
+
+        for (let row = 0; row < size; row++) {
+          for (let col = 0; col < size; col++) {
+            matrix[row][col] += powers[row + col];
+          }
+          rhs[row] += point[field] * powers[row];
+        }
+      });
+
+      return solveLinearSystem(matrix, rhs);
+    }
+
+    function solveLinearSystem(matrix, rhs) {
+      const size = rhs.length;
+      const a = matrix.map((row, index) => [...row, rhs[index]]);
+
+      for (let pivot = 0; pivot < size; pivot++) {
+        let pivotRow = pivot;
+        for (let row = pivot + 1; row < size; row++) {
+          if (Math.abs(a[row][pivot]) > Math.abs(a[pivotRow][pivot])) {
+            pivotRow = row;
+          }
+        }
+
+        if (Math.abs(a[pivotRow][pivot]) < 1.0e-9) {
+          return null;
+        }
+
+        [a[pivot], a[pivotRow]] = [a[pivotRow], a[pivot]];
+        const pivotValue = a[pivot][pivot];
+        for (let col = pivot; col <= size; col++) {
+          a[pivot][col] /= pivotValue;
+        }
+
+        for (let row = 0; row < size; row++) {
+          if (row === pivot) {
+            continue;
+          }
+
+          const scale = a[row][pivot];
+          for (let col = pivot; col <= size; col++) {
+            a[row][col] -= scale * a[pivot][col];
+          }
+        }
+      }
+
+      return a.map((row) => row[size]);
+    }
+
+    function getRmse(points, field, coefficients) {
+      const meanSquaredError = points.reduce((total, point) => {
+        const error = evaluatePolynomial(point.distanceMeters, coefficients) - point[field];
+        return total + error * error;
+      }, 0) / points.length;
+
+      return Math.sqrt(meanSquaredError);
+    }
+
+    function sampleCurve(sortedRows, field, fit, xMin, xMax) {
+      if (fit.model === "interpolation" || !fit.valid) {
+        return sortedRows.map((row) => ({
+          distanceMeters: row.distanceMeters,
+          value: row[field]
+        }));
+      }
+
+      const samples = [];
+      const sampleCount = 80;
+      for (let i = 0; i < sampleCount; i++) {
+        const t = sampleCount === 1 ? 0 : i / (sampleCount - 1);
+        const distanceMeters = xMin + (xMax - xMin) * t;
+        samples.push({
+          distanceMeters,
+          value: evaluatePolynomial(distanceMeters, fit.coefficients)
+        });
+      }
+
+      return samples;
+    }
+
+    function evaluatePolynomial(x, coefficients) {
+      let value = 0;
+      for (let i = coefficients.length - 1; i >= 0; i--) {
+        value = value * x + coefficients[i];
+      }
+
+      return value;
+    }
+
+    function fitSummaryText(fit, unit) {
+      if (fit.model === "interpolation") {
+        return "Interpolation";
+      }
+
+      if (!fit.valid) {
+        return modelOptions[fit.model].label + " unavailable";
+      }
+
+      let label = modelOptions[fit.model].label;
+      if (fit.degree !== fit.requestedDegree) {
+        label += " as " + degreeLabel(fit.degree);
+      }
+
+      return label + " RMSE " + format(fit.rmse, 2) + " " + unit;
+    }
+
+    function degreeLabel(degree) {
+      if (degree === 1) {
+        return "Linear";
+      }
+
+      if (degree === 2) {
+        return "Quadratic";
+      }
+
+      if (degree === 3) {
+        return "Cubic";
+      }
+
+      return "Constant";
+    }
+
+    function javaCurveType(fit) {
+      return fit.model !== "interpolation" && fit.valid
+        ? "ShotCurveType.POLYNOMIAL"
+        : "ShotCurveType.INTERPOLATED_MAP";
+    }
+
+    function javaCoefficientArray(fit) {
+      if (fit.model === "interpolation" || !fit.valid) {
+        return "new double[] {}";
+      }
+
+      return "new double[] {"
+        + fit.coefficients.map(formatCoefficient).join(", ")
+        + "}";
+    }
+
+    function formatCoefficient(value) {
+      if (value !== 0 && Math.abs(value) < 0.000001) {
+        return value.toExponential(8);
+      }
+
+      return format(value, 8);
+    }
+
+    function currentRows() {
+      return state.maps[state.mode];
+    }
+
+    function currentFits() {
+      return state.fits[state.mode];
+    }
+
+    function displayDistance(distanceMeters) {
+      return state.unit === "ft" ? distanceMeters * metersToFeet : distanceMeters;
+    }
+
+    function sortByDistance(a, b) {
+      return a.distanceMeters - b.distanceMeters;
+    }
+
+    function validResult(value) {
+      return ["good", "short", "long", "bad", "unknown"].includes(value) ? value : "unknown";
+    }
+
+    function validModel(value) {
+      return Object.prototype.hasOwnProperty.call(modelOptions, value)
+        ? value
+        : "interpolation";
+    }
+
+    function resultColor(value) {
+      switch (validResult(value)) {
+        case "good":
+          return "#167c5c";
+        case "short":
+        case "long":
+          return "#b75c2f";
+        case "bad":
+          return "#af3745";
+        default:
+          return "#346b9a";
+      }
+    }
+
+    function numberOr(value, fallback) {
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function format(value, digits) {
+      return Number(value).toFixed(digits).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+    }
+
+    function capitalize(value) {
+      return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    function csvCell(value) {
+      const text = String(value);
+      if (!/[",\n]/.test(text)) {
+        return text;
+      }
+      return '"' + text.replaceAll('"', '""') + '"';
+    }
+
+    function escapeAttr(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function line(ctx, x1, y1, x2, y2) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    function setStatus(message) {
+      elements.status.textContent = message;
+      window.clearTimeout(setStatus.timeout);
+      setStatus.timeout = window.setTimeout(() => {
+        elements.status.textContent = "Saved locally";
+      }, 1400);
+    }
+
+    async function copyText(text, message) {
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus(message);
+      } catch (error) {
+        setStatus("Select text and copy");
+      }
+    }
+
+    window.addEventListener("resize", drawCharts);
+  </script>
+</body>
+</html>

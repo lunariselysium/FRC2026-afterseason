@@ -14,8 +14,9 @@
   "game_piece_diameter_m": 0.15,
   "pose_stale_after_seconds": 0.4,
   "yolo": {
-    "backend": "ncnn",
+    "backend": "directml",
     "model_dir": "../models/game_piece_ncnn_model",
+    "model_path": "../models/game_piece.onnx",
     "input_size": 640,
     "inference_stride": 1,
     "score_threshold": 0.35,
@@ -25,6 +26,7 @@
     "use_vulkan": true,
     "use_fp16": true,
     "cpu_threads": 4,
+    "directml_device_id": 0,
     "input_name": null,
     "output_name": null
   },

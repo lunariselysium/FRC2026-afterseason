@@ -16,6 +16,7 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import frc.robot.Constants.IntakeConstants;
 import frc.robot.Constants.MusicConstants;
 import frc.robot.generated.TunerConstants;
 
@@ -36,6 +37,11 @@ public class RobotMusic {
 
         for (MusicConstants.MusicTrackAssignment assignment : MusicConstants.kMusicTrackAssignments) {
             int canId = assignment.motorCanId();
+            if (canId == IntakeConstants.kLeftRollerMotorCanId
+                && !IntakeConstants.kLeftRollerMotorPresent) {
+                continue;
+            }
+
             int trackNumber = assignment.trackNumber();
             TalonFX instrument = new TalonFX(canId, TunerConstants.kCANBus);
             instruments.add(instrument);

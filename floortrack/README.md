@@ -28,19 +28,46 @@ py -m floortrack --demo
 
 ## YOLO Export Format
 
-Export the game-piece detector as NCNN:
+Floortrack supports two detector backends:
+
+- `directml`: ONNX Runtime DirectML on Windows GPUs, including AMD iGPUs.
+- `ncnn`: NCNN with Vulkan when the installed NCNN package exposes a Vulkan device.
+
+For DirectML, export the game-piece detector as ONNX:
+
+```powershell
+yolo export model=game_piece.pt format=onnx imgsz=640 simplify=True
+```
+
+Copy it to:
+
+```text
+floortrack/models/game_piece.onnx
+```
+
+Use this config:
+
+```json
+"yolo": {
+  "backend": "directml",
+  "model_path": "../models/game_piece.onnx",
+  "input_size": 640
+}
+```
+
+For NCNN, export the detector as NCNN:
 
 ```powershell
 yolo export model=game_piece.pt format=ncnn imgsz=640
 ```
 
-Copy the exported directory into:
+Copy the exported NCNN directory into:
 
 ```text
 floortrack/models/game_piece_ncnn_model/
 ```
 
-The app expects a `.param` and `.bin` file in that directory. If your export uses different input or output blob names, set `input_name` and `output_name` in `config/app.example.json`.
+The NCNN backend expects a `.param` and `.bin` file in that directory. If your export uses different input or output blob names, set `input_name` and `output_name` in `config/app.example.json`.
 
 The UI reports whether NCNN actually found a Vulkan GPU. If it says `CPU fallback`, the installed `ncnn` Python package was not built with a usable Vulkan path for this machine, or the Vulkan runtime/device was not visible to NCNN.
 

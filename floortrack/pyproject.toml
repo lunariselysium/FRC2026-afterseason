@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=1.24",
     "opencv-contrib-python>=4.9",
     "ncnn>=1.0.20240410",
+    "onnxruntime-directml>=1.24.4; platform_system == 'Windows'",
 ]
 
 [project.scripts]

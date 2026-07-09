@@ -6,6 +6,8 @@ package frc.robot.subsystems;
 
 import static edu.wpi.first.units.Units.*;
 
+import java.util.Optional;
+
 import com.ctre.phoenix6.CANBus;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
@@ -35,14 +37,13 @@ public class Intake extends SubsystemBase {
         IntakeConstants.kDeployMotorCanId,
         intakeCanBus
     );
-    private final TalonFX leftRollerMotor = new TalonFX(
-        IntakeConstants.kLeftRollerMotorCanId,
-        intakeCanBus
-    );
     private final TalonFX rightRollerMotor = new TalonFX(
         IntakeConstants.kRightRollerMotorCanId,
         intakeCanBus
     );
+    private final Optional<TalonFX> leftRollerMotor = IntakeConstants.kLeftRollerMotorPresent
+        ? Optional.of(new TalonFX(IntakeConstants.kLeftRollerMotorCanId, intakeCanBus))
+        : Optional.empty();
     private final MotionMagicVoltage positionRequest = new MotionMagicVoltage(0.0);
 
     private double targetPositionMotorRotations;
@@ -82,8 +83,8 @@ public class Intake extends SubsystemBase {
 
     public Intake() {
         deployMotor.setNeutralMode(NeutralModeValue.Coast);
-        leftRollerMotor.setNeutralMode(NeutralModeValue.Coast);
         rightRollerMotor.setNeutralMode(NeutralModeValue.Coast);
+        leftRollerMotor.ifPresent(motor -> motor.setNeutralMode(NeutralModeValue.Coast));
 
         applyDeployOperatingCurrentLimits();
         applyDeployPositionControlConfig();
@@ -95,15 +96,17 @@ public class Intake extends SubsystemBase {
                 .withStatorCurrentLimit(IntakeConstants.kRollerStatorCurrentLimitAmps)
                 .withStatorCurrentLimitEnable(true)
         );
-        leftRollerMotor.getConfigurator().apply(rollerConfiguration);
         rightRollerMotor.getConfigurator().apply(rollerConfiguration);
 
-        rightRollerMotor.setControl(
-            new Follower(
-                IntakeConstants.kLeftRollerMotorCanId,
-                getRightRollerMotorAlignment()
-            )
-        );
+        leftRollerMotor.ifPresent(motor -> {
+            motor.getConfigurator().apply(rollerConfiguration);
+            motor.setControl(
+                new Follower(
+                    IntakeConstants.kRightRollerMotorCanId,
+                    getLeftRollerMotorAlignment()
+                )
+            );
+        });
 
         targetPositionMotorRotations = getIntakePositionMotorRotations();
     }
@@ -266,6 +269,7 @@ public class Intake extends SubsystemBase {
         SmartDashboard.putBoolean("Intake/AtTarget", isAtTargetPosition());
         SmartDashboard.putBoolean("Intake/ClosedLoopAtTarget", isClosedLoopAtTarget());
         SmartDashboard.putNumber("Intake/RollerOutput", appliedRollerOutput);
+        SmartDashboard.putBoolean("Intake/LeftRollerMotorPresent", IntakeConstants.kLeftRollerMotorPresent);
         SmartDashboard.putBoolean("Intake/Homing", isHoming());
         SmartDashboard.putBoolean("Intake/Homed", isHomed());
         SmartDashboard.putBoolean("Intake/TargetDeployed", isTargetDeployed());
@@ -466,8 +470,8 @@ public class Intake extends SubsystemBase {
         return IntakeConstants.kDeployPositionSensorSign * targetMechanismMotorRotations;
     }
 
-    private MotorAlignmentValue getRightRollerMotorAlignment() {
-        return IntakeConstants.kRightRollerOpposesLeft
+    private MotorAlignmentValue getLeftRollerMotorAlignment() {
+        return IntakeConstants.kLeftRollerOpposesRight
             ? MotorAlignmentValue.Opposed
             : MotorAlignmentValue.Aligned;
     }
@@ -553,6 +557,6 @@ public class Intake extends SubsystemBase {
 
     private void setRollerOutput(double rollerOutput) {
         appliedRollerOutput = rollerOutput;
-        leftRollerMotor.set(IntakeConstants.kRollerMotorOutputSign * rollerOutput);
+        rightRollerMotor.set(IntakeConstants.kRightRollerMotorOutputSign * rollerOutput);
     }
 }

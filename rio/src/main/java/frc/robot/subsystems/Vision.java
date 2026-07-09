@@ -259,11 +259,13 @@ public class Vision extends SubsystemBase {
         double translationStdDevMeters = VisionConstants.kBaseTranslationStdDevMeters
             * tagCountScale
             * distanceScale
-            * cameraScale;
+            * cameraScale
+            * 2.0;
         double rotationStdDevRadians = VisionConstants.kBaseRotationStdDevRadians
             * tagCountScale
             * distanceScale
-            * cameraScale;
+            * cameraScale
+            * 2.0;
 
         return VecBuilder.fill(
             translationStdDevMeters,

@@ -109,9 +109,6 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         )
     );
 
-    /* The SysId routine to test */
-    private SysIdRoutine m_sysIdRoutineToApply = m_sysIdRoutineTranslation;
-
     /**
      * Constructs a CTRE SwerveDrivetrain using the specified constants.
      * <p>
@@ -199,25 +196,47 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     }
 
     /**
-     * Runs the SysId Quasistatic test in the given direction for the routine
-     * specified by {@link #m_sysIdRoutineToApply}.
+     * Runs the translation SysId Quasistatic test in the given direction.
      *
      * @param direction Direction of the SysId Quasistatic test
      * @return Command to run
      */
     public Command sysIdQuasistatic(SysIdRoutine.Direction direction) {
-        return m_sysIdRoutineToApply.quasistatic(direction);
+        return sysIdTranslationQuasistatic(direction);
     }
 
     /**
-     * Runs the SysId Dynamic test in the given direction for the routine
-     * specified by {@link #m_sysIdRoutineToApply}.
+     * Runs the translation SysId Dynamic test in the given direction.
      *
      * @param direction Direction of the SysId Dynamic test
      * @return Command to run
      */
     public Command sysIdDynamic(SysIdRoutine.Direction direction) {
-        return m_sysIdRoutineToApply.dynamic(direction);
+        return sysIdTranslationDynamic(direction);
+    }
+
+    public Command sysIdTranslationQuasistatic(SysIdRoutine.Direction direction) {
+        return m_sysIdRoutineTranslation.quasistatic(direction);
+    }
+
+    public Command sysIdTranslationDynamic(SysIdRoutine.Direction direction) {
+        return m_sysIdRoutineTranslation.dynamic(direction);
+    }
+
+    public Command sysIdSteerQuasistatic(SysIdRoutine.Direction direction) {
+        return m_sysIdRoutineSteer.quasistatic(direction);
+    }
+
+    public Command sysIdSteerDynamic(SysIdRoutine.Direction direction) {
+        return m_sysIdRoutineSteer.dynamic(direction);
+    }
+
+    public Command sysIdRotationQuasistatic(SysIdRoutine.Direction direction) {
+        return m_sysIdRoutineRotation.quasistatic(direction);
+    }
+
+    public Command sysIdRotationDynamic(SysIdRoutine.Direction direction) {
+        return m_sysIdRoutineRotation.dynamic(direction);
     }
 
     @Override

@@ -12,7 +12,14 @@ from .camera import open_capture
 from .config import AppConfig
 from .field_layout import load_field_layout
 from .geometry import project_bbox_to_known_width, project_pixel_to_floor
+from .yolo_directml import YoloDirectMlDetector
 from .yolo_ncnn import Detection, YoloNcnnDetector
+
+
+def create_yolo_detector(config: AppConfig) -> Any:
+    if config.yolo.backend.lower() in {"directml", "dml", "onnx"}:
+        return YoloDirectMlDetector(config.yolo)
+    return YoloNcnnDetector(config.yolo)
 
 
 class VisionPipeline:
@@ -25,7 +32,7 @@ class VisionPipeline:
             config.tag_size_m,
             config.tag_family,
         )
-        self.detector = YoloNcnnDetector(config.yolo)
+        self.detector = create_yolo_detector(config)
         self._lock = threading.Lock()
         self._running = threading.Event()
         self._thread: threading.Thread | None = None

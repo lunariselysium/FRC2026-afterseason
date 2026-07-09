@@ -6,6 +6,8 @@ package frc.robot.subsystems;
 
 import static edu.wpi.first.units.Units.*;
 
+import java.util.function.DoubleSupplier;
+
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -143,12 +145,35 @@ public class Turret extends SubsystemBase {
         flywheel.run(velocityRotationsPerSecond);
     }
 
+    public Command runFlywheelAtVelocityCommand(DoubleSupplier velocityRotationsPerSecondSupplier) {
+        return runEnd(
+            () -> runFlywheelAtVelocityRotationsPerSecond(
+                velocityRotationsPerSecondSupplier.getAsDouble()
+            ),
+            this::stopFlywheel
+        );
+    }
+
     public void stopFlywheel() {
         flywheel.stop();
     }
 
     public boolean isFlywheelAtTarget() {
         return flywheel.isAtTarget();
+    }
+
+    public boolean isAnySysIdActive() {
+        return heading.isSysIdActive()
+            || pitch.isSysIdActive()
+            || flywheel.isSysIdActive();
+    }
+
+    public double getFlywheelVelocityRotationsPerSecond() {
+        return flywheel.getVelocityRotationsPerSecond();
+    }
+
+    public double getTargetFlywheelVelocityRotationsPerSecond() {
+        return flywheel.getTargetVelocityRotationsPerSecond();
     }
 
     public void runSerializer() {

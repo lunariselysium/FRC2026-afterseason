@@ -63,6 +63,7 @@ class CameraIntrinsics:
 class YoloConfig:
     backend: str
     model_dir: Path
+    model_path: Path | None
     input_size: int
     inference_stride: int
     score_threshold: float
@@ -72,6 +73,7 @@ class YoloConfig:
     use_vulkan: bool
     use_fp16: bool
     cpu_threads: int
+    directml_device_id: int
     input_name: str | None = None
     output_name: str | None = None
 
@@ -122,6 +124,7 @@ def _default_raw_config() -> dict[str, Any]:
         "yolo": {
             "backend": "ncnn",
             "model_dir": str(root / "floortrack" / "models" / "game_piece_ncnn_model"),
+            "model_path": str(root / "floortrack" / "models" / "game_piece.onnx"),
             "input_size": 640,
             "inference_stride": 1,
             "score_threshold": 0.35,
@@ -131,6 +134,7 @@ def _default_raw_config() -> dict[str, Any]:
             "use_vulkan": True,
             "use_fp16": True,
             "cpu_threads": 4,
+            "directml_device_id": 0,
             "input_name": None,
             "output_name": None,
         },
@@ -173,6 +177,7 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
     yolo = YoloConfig(
         backend=str(yolo_raw["backend"]),
         model_dir=_resolve_path(yolo_raw["model_dir"], base_dir) or Path(),
+        model_path=_resolve_path(yolo_raw.get("model_path"), base_dir),
         input_size=int(yolo_raw["input_size"]),
         inference_stride=max(1, int(yolo_raw.get("inference_stride", 1))),
         score_threshold=float(yolo_raw["score_threshold"]),
@@ -182,6 +187,7 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
         use_vulkan=bool(yolo_raw["use_vulkan"]),
         use_fp16=bool(yolo_raw.get("use_fp16", True)),
         cpu_threads=max(1, int(yolo_raw.get("cpu_threads", 4))),
+        directml_device_id=max(0, int(yolo_raw.get("directml_device_id", 0))),
         input_name=yolo_raw.get("input_name"),
         output_name=yolo_raw.get("output_name"),
     )

@@ -122,10 +122,7 @@ public class TurretHeading {
     }
 
     public double getThroughBoreHeadingDegrees() {
-        return TurretConstants.kTurretHeadingSign
-            * unwrappedEncoderRotationsFromForward
-            * (TurretConstants.kEncoderGearTeeth / TurretConstants.kTurretGearTeeth)
-            * 360.0;
+        return unwrappedEncoderRotationsFromForward * getHeadingDegreesPerEncoderRotation();
     }
 
     public double getTargetHeadingDegrees() {
@@ -183,6 +180,23 @@ public class TurretHeading {
 
     public void stepTargetRight() {
         setTargetHeadingDegrees(targetHeadingDegrees - TurretConstants.kTargetHeadingStepDegrees);
+    }
+
+    public void resetEncoderRotationToTargetHeading() {
+        if (!encoderWasPresentAtStartup || !isEncoderConnected()) {
+            return;
+        }
+
+        previousRawEncoderRotations = getRawEncoderRotations();
+        unwrappedEncoderRotationsFromForward =
+            TurretHeadingMath.chooseNearestEquivalentEncoderRotationsFromForward(
+                previousRawEncoderRotations - getForwardEncoderOffsetRotations(),
+                targetHeadingDegrees,
+                getHeadingDegreesPerEncoderRotation()
+            );
+        usingMotorEncoderFallback = false;
+        lastEncoderConnected = true;
+        syncMotorEncoderFallbackOffset();
     }
 
     public void prepareSysId() {
@@ -250,6 +264,12 @@ public class TurretHeading {
         return TurretConstants.kHeadingMotorPositionSign
             * headingMotor.getPosition().getValueAsDouble()
             / TurretConstants.kMotorToTurretReduction
+            * 360.0;
+    }
+
+    private double getHeadingDegreesPerEncoderRotation() {
+        return TurretConstants.kTurretHeadingSign
+            * (TurretConstants.kEncoderGearTeeth / TurretConstants.kTurretGearTeeth)
             * 360.0;
     }
 

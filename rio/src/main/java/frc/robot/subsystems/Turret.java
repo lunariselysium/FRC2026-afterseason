@@ -89,6 +89,10 @@ public class Turret extends SubsystemBase {
         heading.stepTargetRight();
     }
 
+    public void resetHeadingEncoderRotationToTargetHeading() {
+        heading.resetEncoderRotationToTargetHeading();
+    }
+
     public double getHeadingDegrees() {
         return heading.getHeadingDegrees();
     }

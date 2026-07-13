@@ -78,6 +78,21 @@ final class TurretHeadingMath {
         return Math.abs(targetHeadingDegrees - measuredHeadingDegrees) <= toleranceDegrees;
     }
 
+    static double chooseNearestEquivalentEncoderRotationsFromForward(
+        double rawEncoderRotationsFromForward,
+        double referenceHeadingDegrees,
+        double headingDegreesPerEncoderRotation
+    ) {
+        if (Math.abs(headingDegreesPerEncoderRotation) <= kEpsilon) {
+            return rawEncoderRotationsFromForward;
+        }
+
+        double referenceEncoderRotations = referenceHeadingDegrees
+            / headingDegreesPerEncoderRotation;
+        return rawEncoderRotationsFromForward
+            + Math.round(referenceEncoderRotations - rawEncoderRotationsFromForward);
+    }
+
     private static boolean isBetterCandidate(
         double candidateHeadingDegrees,
         double bestHeadingDegrees,

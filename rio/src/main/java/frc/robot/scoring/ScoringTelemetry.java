@@ -9,10 +9,12 @@ import java.util.OptionalDouble;
 
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
@@ -26,6 +28,7 @@ public class ScoringTelemetry {
     private final CommandSwerveDrivetrain drivetrain;
     private final Turret turret;
     private final Vision vision;
+    private final Field2d shotField = new Field2d();
 
     public ScoringTelemetry(
         CommandSwerveDrivetrain drivetrain,
@@ -35,6 +38,7 @@ public class ScoringTelemetry {
         this.drivetrain = drivetrain;
         this.turret = turret;
         this.vision = vision;
+        SmartDashboard.putData(kDashboardPrefix + "Field", shotField);
     }
 
     public void update() {
@@ -49,6 +53,7 @@ public class ScoringTelemetry {
         double robotHeadingDegrees = robotPose.getRotation().getDegrees();
         Optional<Alliance> alliance = DriverStation.getAlliance();
 
+        shotField.setRobotPose(robotPose);
         SmartDashboard.putNumber(kDashboardPrefix + "RobotX", robotPose.getX());
         SmartDashboard.putNumber(kDashboardPrefix + "RobotY", robotPose.getY());
         SmartDashboard.putNumber(
@@ -78,6 +83,7 @@ public class ScoringTelemetry {
         if (alliance.isEmpty()) {
             SmartDashboard.putBoolean(kDashboardPrefix + "TargetValid", false);
             SmartDashboard.putString(kDashboardPrefix + "Status", "NO_ALLIANCE");
+            clearFieldTargetObjects();
             publishTurretState();
             return;
         }
@@ -159,6 +165,7 @@ public class ScoringTelemetry {
             kDashboardPrefix + "SuggestedFeedAllowedByDistance",
             target.shotSetpoint().feedAllowedByDistance()
         );
+        publishFieldTargetObjects(target);
     }
 
     private void publishTurretState() {
@@ -197,5 +204,24 @@ public class ScoringTelemetry {
 
     private static double wrapDegrees(double degrees) {
         return MathUtil.inputModulus(degrees, -180.0, 180.0);
+    }
+
+    private void publishFieldTargetObjects(ScoringTarget target) {
+        Pose2d targetPose = new Pose2d(target.fieldPoint(), Rotation2d.kZero);
+        Pose2d compensatedTargetPose =
+            new Pose2d(target.compensatedFieldPoint(), Rotation2d.kZero);
+        Pose2d turretPose = new Pose2d(target.turretFieldPoint(), Rotation2d.kZero);
+
+        shotField.getObject("Target").setPose(targetPose);
+        shotField.getObject("CompensatedTarget").setPose(compensatedTargetPose);
+        shotField.getObject("Turret").setPose(turretPose);
+        shotField.getObject("AimLine").setPoses(turretPose, compensatedTargetPose);
+    }
+
+    private void clearFieldTargetObjects() {
+        shotField.getObject("Target").setPoses();
+        shotField.getObject("CompensatedTarget").setPoses();
+        shotField.getObject("Turret").setPoses();
+        shotField.getObject("AimLine").setPoses();
     }
 }

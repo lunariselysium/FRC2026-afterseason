@@ -16,6 +16,7 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
+import edu.wpi.first.units.measure.Voltage;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Notifier;
@@ -193,6 +194,20 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
      */
     public Command applyRequest(Supplier<SwerveRequest> request) {
         return run(() -> this.setControl(request.get()));
+    }
+
+    /**
+     * Drives all modules straight forward at the requested voltage while scheduled.
+     * The drive output is explicitly returned to zero when the command ends.
+     *
+     * @param voltage Voltage to apply to each drive motor
+     * @return Command to run
+     */
+    public Command driveForwardAtVoltageCommand(Voltage voltage) {
+        return runEnd(
+            () -> setControl(m_translationCharacterization.withVolts(voltage)),
+            () -> setControl(m_translationCharacterization.withVolts(Volts.of(0.0)))
+        );
     }
 
     /**

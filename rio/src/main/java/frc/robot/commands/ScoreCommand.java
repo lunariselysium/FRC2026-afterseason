@@ -27,6 +27,8 @@ public class ScoreCommand extends Command {
     private final Vision vision;
 
     private int readyCycles;
+    private boolean active;
+    private boolean feeding;
 
     public ScoreCommand(
         CommandSwerveDrivetrain drivetrain,
@@ -44,6 +46,8 @@ public class ScoreCommand extends Command {
 
     @Override
     public void initialize() {
+        active = true;
+        feeding = false;
         readyCycles = 0;
         stopFeeding();
         turret.stopShotOutputs();
@@ -54,6 +58,7 @@ public class ScoreCommand extends Command {
         Optional<Alliance> alliance = DriverStation.getAlliance();
         if (alliance.isEmpty()) {
             readyCycles = 0;
+            feeding = false;
             stopFeeding();
             turret.stopShotOutputs();
             publishIdleTelemetry("NO_ALLIANCE");
@@ -93,6 +98,7 @@ public class ScoreCommand extends Command {
         }
 
         boolean shouldFeed = readyCycles >= ScoringConstants.kReadyDebounceCycles;
+        feeding = shouldFeed;
         if (shouldFeed) {
             feeder.runAll();
             turret.runSerializer();
@@ -105,6 +111,8 @@ public class ScoreCommand extends Command {
 
     @Override
     public void end(boolean interrupted) {
+        active = false;
+        feeding = false;
         readyCycles = 0;
         stopFeeding();
         turret.stopShotOutputs();
@@ -114,6 +122,14 @@ public class ScoreCommand extends Command {
     @Override
     public boolean isFinished() {
         return false;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public boolean isFeeding() {
+        return feeding;
     }
 
     private void stopFeeding() {

@@ -46,6 +46,7 @@ public class Intake extends SubsystemBase {
         : Optional.empty();
     private final MotionMagicVoltage positionRequest = new MotionMagicVoltage(0.0);
 
+    private boolean autoScoreRetractionMotionProfileActive;
     private double targetPositionMotorRotations;
     private double appliedDeployMotorOutput;
     private double appliedDeployMechanismVoltage;
@@ -181,6 +182,7 @@ public class Intake extends SubsystemBase {
 
         homing = false;
         sysIdActive = false;
+        useNormalDeployMotionProfile();
         targetDeployed = false;
         resetDeployedHardstopCapture();
         targetPositionMotorRotations = 0.0;
@@ -196,9 +198,26 @@ public class Intake extends SubsystemBase {
 
         homing = false;
         sysIdActive = false;
+        useNormalDeployMotionProfile();
         targetDeployed = true;
         resetDeployedHardstopCapture();
         targetPositionMotorRotations = IntakeConstants.kDeployedSetpointMotorRotations;
+        positionControlActive = true;
+    }
+
+    public void moveToAutoScoreRetractionSetpoint() {
+        if (!isPositionControlAllowed()) {
+            targetPositionMotorRotations = getIntakePositionMotorRotations();
+            positionControlActive = false;
+            return;
+        }
+
+        homing = false;
+        sysIdActive = false;
+        useAutoScoreRetractionMotionProfile();
+        targetDeployed = false;
+        resetDeployedHardstopCapture();
+        targetPositionMotorRotations = IntakeConstants.kAutoScoreRetractionSetpointMotorRotations;
         positionControlActive = true;
     }
 
@@ -276,6 +295,10 @@ public class Intake extends SubsystemBase {
         SmartDashboard.putBoolean("Intake/PositionControlActive", isPositionControlActive());
         SmartDashboard.putBoolean("Intake/HomingTimedOut", didHomingTimeOut());
         SmartDashboard.putBoolean("Intake/SysIdActive", isSysIdActive());
+        SmartDashboard.putBoolean(
+            "Intake/AutoScoreRetractionMotionProfileActive",
+            autoScoreRetractionMotionProfileActive
+        );
         SmartDashboard.putBoolean("Intake/DeployedHardstopCurrentHigh", deployedHardstopCurrentHigh);
         SmartDashboard.putBoolean("Intake/DeployedHardstopCaptured", deployedHardstopCaptured);
     }
@@ -510,13 +533,47 @@ public class Intake extends SubsystemBase {
                 .withKA(IntakeConstants.kPositionClosedLoopKa)
                 .withStaticFeedforwardSign(StaticFeedforwardSignValue.UseVelocitySign)
         );
+        applyDeployMotionMagicConfig(
+            IntakeConstants.kMotionMagicCruiseVelocityMotorRotationsPerSecond,
+            IntakeConstants.kMotionMagicAccelerationMotorRotationsPerSecondSquared
+        );
+    }
+
+    private void useNormalDeployMotionProfile() {
+        if (!autoScoreRetractionMotionProfileActive) {
+            return;
+        }
+
+        applyDeployMotionMagicConfig(
+            IntakeConstants.kMotionMagicCruiseVelocityMotorRotationsPerSecond,
+            IntakeConstants.kMotionMagicAccelerationMotorRotationsPerSecondSquared
+        );
+        autoScoreRetractionMotionProfileActive = false;
+    }
+
+    private void useAutoScoreRetractionMotionProfile() {
+        if (autoScoreRetractionMotionProfileActive) {
+            return;
+        }
+
+        applyDeployMotionMagicConfig(
+            IntakeConstants.kAutoScoreRetractionCruiseVelocityMotorRotationsPerSecond,
+            IntakeConstants.kAutoScoreRetractionAccelerationMotorRotationsPerSecondSquared
+        );
+        autoScoreRetractionMotionProfileActive = true;
+    }
+
+    private void applyDeployMotionMagicConfig(
+        double cruiseVelocityMotorRotationsPerSecond,
+        double accelerationMotorRotationsPerSecondSquared
+    ) {
         deployMotor.getConfigurator().apply(
             new MotionMagicConfigs()
                 .withMotionMagicCruiseVelocity(
-                    IntakeConstants.kMotionMagicCruiseVelocityMotorRotationsPerSecond
+                    cruiseVelocityMotorRotationsPerSecond
                 )
                 .withMotionMagicAcceleration(
-                    IntakeConstants.kMotionMagicAccelerationMotorRotationsPerSecondSquared
+                    accelerationMotorRotationsPerSecondSquared
                 )
         );
     }

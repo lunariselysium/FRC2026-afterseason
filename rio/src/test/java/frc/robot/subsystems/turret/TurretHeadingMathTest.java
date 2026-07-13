@@ -69,6 +69,36 @@ class TurretHeadingMathTest {
         assertFalse(TurretHeadingMath.isWithinTolerance(10.0, 12.1, 2.0));
     }
 
+    @Test
+    void choosesEncoderRotationNearestReferenceHeading() {
+        double headingDegreesPerEncoderRotation = -56.0;
+
+        assertEquals(
+            -0.9,
+            TurretHeadingMath.chooseNearestEquivalentEncoderRotationsFromForward(
+                0.1,
+                50.0,
+                headingDegreesPerEncoderRotation
+            ),
+            kTolerance
+        );
+    }
+
+    @Test
+    void keepsEncoderRotationWhenAlreadyNearestReferenceHeading() {
+        double headingDegreesPerEncoderRotation = -56.0;
+
+        assertEquals(
+            0.1,
+            TurretHeadingMath.chooseNearestEquivalentEncoderRotationsFromForward(
+                0.1,
+                -6.0,
+                headingDegreesPerEncoderRotation
+            ),
+            kTolerance
+        );
+    }
+
     private static void assertNearestEquivalent(
         double expectedHeadingDegrees,
         double requestedHeadingDegrees,

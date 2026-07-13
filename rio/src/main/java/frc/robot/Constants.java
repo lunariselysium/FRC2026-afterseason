@@ -102,8 +102,8 @@ public final class Constants {
         public static final double kMaxSingleTagAmbiguity = 0.20;
         public static final double kMaxAverageTagDistanceMeters = 7.0;
 
-        public static final double kBaseTranslationStdDevMeters = 0.06;
-        public static final double kBaseRotationStdDevRadians = Units.degreesToRadians(4.0);
+        public static final double kBaseTranslationStdDevMeters = 0.08;
+        public static final double kBaseRotationStdDevRadians = Units.degreesToRadians(15.0);
         public static final double kSingleTagStdDevMultiplier = 3.0;
         public static final double kTurretCameraStdDevMultiplier = 1.5;
 
@@ -158,8 +158,8 @@ public final class Constants {
         public static final int[] kRedHubTagIds = {2, 3, 4, 5, 8, 9, 10, 11};
 
         public static final double kAllianceZoneDepthMeters = Units.inchesToMeters(182.11);
-        public static final double kPassTargetInsetIntoAllianceZoneMeters = Units.inchesToMeters(12.0);
-        public static final double kPassTargetYOffsetFromFieldCenterMeters = Units.inchesToMeters(47.0);
+        public static final double kPassTargetInsetIntoAllianceZoneMeters = Units.inchesToMeters(38.0);
+        public static final double kPassTargetYOffsetFromFieldCenterMeters = Units.inchesToMeters(80.0);
 
         public static final double kBluePassTargetXMeters =
             kAllianceZoneDepthMeters - kPassTargetInsetIntoAllianceZoneMeters;
@@ -210,10 +210,10 @@ public final class Constants {
             new ShotMapPoint(4.63, 20.0, 50.0),
         };
         public static final ShotMapPoint[] kPassShotMap = {
-            new ShotMapPoint(3.00, 16.0, 30.0),
-            new ShotMapPoint(5.00, 22.0, 34.0),
-            new ShotMapPoint(7.00, 28.0, 38.0),
-            new ShotMapPoint(9.00, 34.0, 42.0),
+            new ShotMapPoint(2.3, 35, 32),
+            new ShotMapPoint(3.33, 35, 34.3),
+            new ShotMapPoint(4.5, 35, 38),
+            new ShotMapPoint(6.17, 35, 48),
         };
         public static final ShotCurve kHubShotCurve = new ShotCurve(
             ShotCurveType.POLYNOMIAL,
@@ -224,10 +224,10 @@ public final class Constants {
         );
         public static final ShotCurve kPassShotCurve = new ShotCurve(
             ShotCurveType.INTERPOLATED_MAP,
-            ShotCurveType.INTERPOLATED_MAP,
+            ShotCurveType.POLYNOMIAL,
             kPassShotMap,
             new double[] {},
-            new double[] {}
+            new double[] {33.86368896, -2.57332096, 0.78704293}
         );
     }
 
@@ -356,6 +356,7 @@ public final class Constants {
 
         public static final double kMinPitchDegrees = 0.0;
         public static final double kMaxPitchDegrees = 35.0;
+        public static final double kDefaultPitchDegrees = 5.0;
         public static final double kTargetPitchStepDegrees = 5.0;
         public static final double kPitchToleranceDegrees = 0.5;
         public static final double kPitchReadyToleranceDegrees = 2.0;
@@ -461,6 +462,9 @@ public final class Constants {
         public static final double kRackPinionGearTeeth = 27.0;
 
         public static final double kDeployedSetpointMotorRotations = 20.8;
+        public static final double kAutoScoreRetractionDeployedFraction = 0.30;
+        public static final double kAutoScoreRetractionSetpointMotorRotations =
+            kDeployedSetpointMotorRotations * kAutoScoreRetractionDeployedFraction;
         public static final double kPositionToleranceMotorRotations = 0.5;
         public static final double kPositionClosedLoopKp = 1.2;
         public static final double kPositionClosedLoopKd = 0.0;
@@ -471,6 +475,8 @@ public final class Constants {
         public static final double kStowAssistFeedForwardVolts = 0.5;
         public static final double kMotionMagicCruiseVelocityMotorRotationsPerSecond = 36.0;
         public static final double kMotionMagicAccelerationMotorRotationsPerSecondSquared = 72.0;
+        public static final double kAutoScoreRetractionCruiseVelocityMotorRotationsPerSecond = 12.0;
+        public static final double kAutoScoreRetractionAccelerationMotorRotationsPerSecondSquared = 24.0;
         public static final double kDeployedHardstopCaptureCurrentThresholdAmps = 15.0;
         public static final double kDeployedHardstopCaptureWindowMotorRotations = 1.2;
 

@@ -50,6 +50,7 @@ public class ScoreCommand extends Command {
         active = true;
         feeding = false;
         readyCycles = 0;
+        drivetrain.useShootingDriveCurrentLimit();
         stopFeeding();
         turret.stopShotOutputs();
     }
@@ -120,6 +121,7 @@ public class ScoreCommand extends Command {
         readyCycles = 0;
         stopFeeding();
         turret.stopShotOutputs();
+        drivetrain.useNormalDriveCurrentLimit();
         publishIdleTelemetry(interrupted ? "INTERRUPTED" : "ENDED");
     }
 

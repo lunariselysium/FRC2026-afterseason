@@ -144,6 +144,13 @@ public final class Constants {
         public static final double kRelocalizationWarningSeconds = 1.2;
     }
 
+    public static final class DriveConstants {
+        private DriveConstants() {}
+
+        public static final double kNormalSupplyCurrentLimitAmps = 70.0;
+        public static final double kShootingSupplyCurrentLimitAmps = 40.0;
+    }
+
     public static final class AutoConstants {
         private AutoConstants() {}
 

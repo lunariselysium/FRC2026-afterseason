@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.Utils;
+import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.swerve.SwerveDrivetrainConstants;
 import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveModuleConstants;
@@ -31,6 +32,7 @@ import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 
 import frc.robot.Constants.AutoConstants;
+import frc.robot.Constants.DriveConstants;
 import frc.robot.generated.TunerConstants.TunerSwerveDrivetrain;
 
 /**
@@ -44,6 +46,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     private static final double kSimLoopPeriod = 0.004; // 4 ms
     private Notifier m_simNotifier = null;
     private double m_lastSimTime;
+    private final DriveCurrentLimitController driveCurrentLimitController;
 
     /* Blue alliance sees forward as 0 degrees (toward red alliance wall) */
     private static final Rotation2d kBlueAlliancePerspectiveRotation = Rotation2d.kZero;
@@ -134,6 +137,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         SwerveModuleConstants<?, ?, ?>... modules
     ) {
         super(drivetrainConstants, modules);
+        driveCurrentLimitController = createDriveCurrentLimitController();
         if (Utils.isSimulation()) {
             startSimThread();
         }
@@ -159,6 +163,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         SwerveModuleConstants<?, ?, ?>... modules
     ) {
         super(drivetrainConstants, odometryUpdateFrequency, modules);
+        driveCurrentLimitController = createDriveCurrentLimitController();
         if (Utils.isSimulation()) {
             startSimThread();
         }
@@ -192,6 +197,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         SwerveModuleConstants<?, ?, ?>... modules
     ) {
         super(drivetrainConstants, odometryUpdateFrequency, odometryStandardDeviation, visionStandardDeviation, modules);
+        driveCurrentLimitController = createDriveCurrentLimitController();
         if (Utils.isSimulation()) {
             startSimThread();
         }
@@ -258,6 +264,34 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
      */
     public Command applyRequest(Supplier<SwerveRequest> request) {
         return run(() -> this.setControl(request.get()));
+    }
+
+    /** Lowers drive supply current while shooter motors are accelerating or feeding. */
+    public void useShootingDriveCurrentLimit() {
+        driveCurrentLimitController.useShootingLimit();
+    }
+
+    /** Restores the normal drive supply-current limit after shooting ends. */
+    public void useNormalDriveCurrentLimit() {
+        driveCurrentLimitController.useNormalLimit();
+    }
+
+    private DriveCurrentLimitController createDriveCurrentLimitController() {
+        return new DriveCurrentLimitController(
+            DriveConstants.kNormalSupplyCurrentLimitAmps,
+            DriveConstants.kShootingSupplyCurrentLimitAmps,
+            this::applyDriveSupplyCurrentLimit
+        );
+    }
+
+    private void applyDriveSupplyCurrentLimit(double supplyCurrentLimitAmps) {
+        CurrentLimitsConfigs currentLimits = new CurrentLimitsConfigs()
+            .withSupplyCurrentLimit(Amps.of(supplyCurrentLimitAmps))
+            .withSupplyCurrentLimitEnable(true);
+
+        for (var module : getModules()) {
+            module.getDriveMotor().getConfigurator().apply(currentLimits);
+        }
     }
 
     /**

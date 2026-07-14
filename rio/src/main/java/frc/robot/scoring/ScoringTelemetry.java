@@ -18,6 +18,7 @@ import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
+import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.robot.subsystems.Turret;
 import frc.robot.subsystems.Vision;
@@ -95,7 +96,10 @@ public class ScoringTelemetry {
             robotSpeeds,
             ScoringConstants.kShotTimeOfFlightSeconds,
             alliance.get(),
-            hubVisionCorrectionDegrees
+            hubVisionCorrectionDegrees,
+            DriverStation.isAutonomousEnabled()
+                ? TargetSelectionMode.HUB_ONLY
+                : TargetSelectionMode.AUTOMATIC
         );
 
         SmartDashboard.putBoolean(kDashboardPrefix + "TargetValid", true);

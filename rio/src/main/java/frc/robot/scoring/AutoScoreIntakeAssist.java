@@ -4,36 +4,59 @@
 
 package frc.robot.scoring;
 
+import frc.robot.Constants.IntakeConstants;
+
 public class AutoScoreIntakeAssist {
     public enum IntakeRequest {
         IDLE,
         DEPLOYED,
-        AUTO_SCORE_RETRACTED
+        AUTO_SCORE_SEMI_DEPLOYED,
+        AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED
     }
 
     private boolean autoScoreWasActive;
     private boolean feedingStarted;
+    private double feedingStartedAtSeconds;
 
     public IntakeRequest update(
         boolean autoScoreActive,
         boolean autoScoreFeeding,
-        boolean intakeButtonPressed
+        boolean intakeButtonPressed,
+        double timestampSeconds
     ) {
         if (!autoScoreActive) {
             boolean shouldRestoreDeployed = autoScoreWasActive && feedingStarted;
             autoScoreWasActive = false;
             feedingStarted = false;
+            feedingStartedAtSeconds = 0.0;
             return shouldRestoreDeployed ? IntakeRequest.DEPLOYED : IntakeRequest.IDLE;
         }
 
         autoScoreWasActive = true;
-        feedingStarted = feedingStarted || autoScoreFeeding;
+        if (autoScoreFeeding && !feedingStarted) {
+            feedingStarted = true;
+            feedingStartedAtSeconds = timestampSeconds;
+        }
         if (!feedingStarted) {
             return IntakeRequest.IDLE;
         }
 
-        return intakeButtonPressed
-            ? IntakeRequest.DEPLOYED
-            : IntakeRequest.AUTO_SCORE_RETRACTED;
+        if (intakeButtonPressed) {
+            return IntakeRequest.DEPLOYED;
+        }
+
+        double elapsedSinceFeedingStartedSeconds = timestampSeconds - feedingStartedAtSeconds;
+        if (elapsedSinceFeedingStartedSeconds < IntakeConstants.kAutoScoreRetractionDelaySeconds) {
+            return IntakeRequest.IDLE;
+        }
+
+        double oscillationSeconds =
+            elapsedSinceFeedingStartedSeconds - IntakeConstants.kAutoScoreRetractionDelaySeconds;
+        long oscillationPhase = (long) Math.floor(
+            oscillationSeconds / IntakeConstants.kAutoScoreOscillationPhaseSeconds
+        );
+        return oscillationPhase % 2L == 0L
+            ? IntakeRequest.AUTO_SCORE_SEMI_DEPLOYED
+            : IntakeRequest.AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED;
     }
 }

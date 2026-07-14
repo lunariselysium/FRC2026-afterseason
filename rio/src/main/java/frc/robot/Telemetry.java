@@ -21,7 +21,11 @@ import edu.wpi.first.wpilibj.util.Color;
 import edu.wpi.first.wpilibj.util.Color8Bit;
 
 public class Telemetry {
+    private static final double kTelemetryUpdatePeriodSeconds = 0.1;
+
     private final double MaxSpeed;
+    private final TelemetryRateLimiter rateLimiter =
+        new TelemetryRateLimiter(kTelemetryUpdatePeriodSeconds);
 
     /**
      * Construct a telemetry object, with the specified max speed of the robot
@@ -86,6 +90,10 @@ public class Telemetry {
 
     /** Accept the swerve drive state and telemeterize it to SmartDashboard and SignalLogger. */
     public void telemeterize(SwerveDriveState state) {
+        if (!rateLimiter.shouldPublish(state.Timestamp)) {
+            return;
+        }
+
         /* Telemeterize the swerve drive state */
         drivePose.set(state.Pose);
         driveSpeeds.set(state.Speeds);

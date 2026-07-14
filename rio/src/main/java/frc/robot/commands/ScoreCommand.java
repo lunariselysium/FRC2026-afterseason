@@ -15,6 +15,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.scoring.ScoringCalculator;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
+import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.robot.subsystems.Feeder;
 import frc.robot.subsystems.Turret;
@@ -78,7 +79,10 @@ public class ScoreCommand extends Command {
             drivetrainState.Speeds,
             ScoringConstants.kShotTimeOfFlightSeconds,
             alliance.get(),
-            hubVisionCorrectionDegrees
+            hubVisionCorrectionDegrees,
+            DriverStation.isAutonomousEnabled()
+                ? TargetSelectionMode.HUB_ONLY
+                : TargetSelectionMode.AUTOMATIC
         );
 
         turret.setTargetHeadingDegrees(target.turretHeadingDegrees());

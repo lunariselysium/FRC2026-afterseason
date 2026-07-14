@@ -23,6 +23,7 @@ import frc.robot.Constants.ScoringConstants.ShotCurve;
 import frc.robot.Constants.ScoringConstants.ShotCurveType;
 import frc.robot.Constants.ScoringConstants.ShotMapPoint;
 import frc.robot.scoring.ScoringCalculator.ShotSetpoint;
+import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
 import frc.robot.scoring.ScoringCalculator.TargetMode;
 
 class ScoringCalculatorTest {
@@ -71,6 +72,22 @@ class ScoringCalculatorTest {
         assertEquals(ScoringConstants.kBlueUpperPassTargetMeters.getY(), blueUpperTarget.fieldPoint().getY(), kTolerance);
         assertEquals(TargetMode.PASS, redLowerTarget.mode());
         assertEquals(ScoringConstants.kRedLowerPassTargetMeters.getY(), redLowerTarget.fieldPoint().getY(), kTolerance);
+    }
+
+    @Test
+    void hubOnlyTargetSelectionIgnoresPassTargetOutsideAllianceZone() {
+        ScoringCalculator.ScoringTarget target = ScoringCalculator.calculateTarget(
+            new Pose2d(8.0, ScoringConstants.kBlueUpperPassTargetMeters.getY() + 0.5, Rotation2d.kZero),
+            new ChassisSpeeds(0.0, 0.0, 0.0),
+            0.0,
+            Alliance.Blue,
+            OptionalDouble.empty(),
+            TargetSelectionMode.HUB_ONLY
+        );
+
+        assertEquals(TargetMode.HUB, target.mode());
+        assertEquals(ScoringConstants.kBlueHubCenterMeters.getX(), target.fieldPoint().getX(), kTolerance);
+        assertEquals(ScoringConstants.kBlueHubCenterMeters.getY(), target.fieldPoint().getY(), kTolerance);
     }
 
     @Test

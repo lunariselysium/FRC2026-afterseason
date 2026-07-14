@@ -27,6 +27,11 @@ public final class ScoringCalculator {
         PASS
     }
 
+    public enum TargetSelectionMode {
+        AUTOMATIC,
+        HUB_ONLY
+    }
+
     public record ShotSetpoint(
         double pitchDegrees,
         double flywheelRotationsPerSecond,
@@ -66,7 +71,29 @@ public final class ScoringCalculator {
         Alliance alliance,
         OptionalDouble hubVisionCorrectionDegrees
     ) {
+        return calculateTarget(
+            robotPose,
+            robotRelativeSpeeds,
+            shotTimeOfFlightSeconds,
+            alliance,
+            hubVisionCorrectionDegrees,
+            TargetSelectionMode.AUTOMATIC
+        );
+    }
+
+    public static ScoringTarget calculateTarget(
+        Pose2d robotPose,
+        ChassisSpeeds robotRelativeSpeeds,
+        double shotTimeOfFlightSeconds,
+        Alliance alliance,
+        OptionalDouble hubVisionCorrectionDegrees,
+        TargetSelectionMode targetSelectionMode
+    ) {
         boolean hubShot = isInOwnAllianceZone(robotPose.getTranslation(), alliance);
+        if (targetSelectionMode == TargetSelectionMode.HUB_ONLY) {
+            hubShot = true;
+        }
+
         Translation2d targetPoint = hubShot
             ? getHubCenter(alliance)
             : getNearestPassTarget(robotPose.getTranslation(), alliance);

@@ -107,6 +107,13 @@ public final class Constants {
         public static final double kSingleTagStdDevMultiplier = 3.0;
         public static final double kTurretCameraStdDevMultiplier = 1.5;
 
+        public static final int kRelocalizationRequiredSampleCount = 3;
+        public static final int kRelocalizationMinimumTagCount = 1;
+        public static final double kRelocalizationMaxPoseZErrorMeters = 0.20;
+        public static final double kRelocalizationMaxTranslationSpreadMeters = 0.25;
+        public static final double kRelocalizationMaxRotationSpreadRadians =
+            Units.degreesToRadians(8.0);
+
         private static double millimetersToMeters(double millimeters) {
             return millimeters / 1000.0;
         }
@@ -122,6 +129,35 @@ public final class Constants {
         private static double fromRightMillimeters(double millimetersFromRight) {
             return -kDrivetrainWidthMeters / 2.0 + millimetersToMeters(millimetersFromRight);
         }
+    }
+
+    public static final class BumpCrossingConstants {
+        private BumpCrossingConstants() {}
+
+        /*
+         * Initial robot-relative bump-crossing values. Direction is selected by
+         * the PathPlanner named command.
+         */
+        public static final double kCrossingSpeedMetersPerSecond = 1.5;
+        public static final double kCrossingDriveTimeSeconds = 2.4;
+        public static final double kMaximumDriveTimeSeconds = 2.4;
+        public static final double kRelocalizationWarningSeconds = 1.2;
+    }
+
+    public static final class AutoConstants {
+        private AutoConstants() {}
+
+        /*
+         * These controller gains intentionally start at zero because this robot
+         * has not supplied characterized PathPlanner translation/rotation gains.
+         * Tune them before relying on closed-loop path accuracy.
+         */
+        public static final double kPathTranslationKp = 3.0;
+        public static final double kPathTranslationKi = 0.0;
+        public static final double kPathTranslationKd = 0.0;
+        public static final double kPathRotationKp = 4.0;
+        public static final double kPathRotationKi = 0.0;
+        public static final double kPathRotationKd = 0.0;
     }
 
     public static final class ScoringConstants {
@@ -465,6 +501,11 @@ public final class Constants {
         public static final double kAutoScoreRetractionDeployedFraction = 0.30;
         public static final double kAutoScoreRetractionSetpointMotorRotations =
             kDeployedSetpointMotorRotations * kAutoScoreRetractionDeployedFraction;
+        public static final double kAutoScoreOscillationDeployedFraction = 0.70;
+        public static final double kAutoScoreOscillationSetpointMotorRotations =
+            kDeployedSetpointMotorRotations * kAutoScoreOscillationDeployedFraction;
+        public static final double kAutoScoreRetractionDelaySeconds = 1.0;
+        public static final double kAutoScoreOscillationPhaseSeconds = 1.0;
         public static final double kPositionToleranceMotorRotations = 0.5;
         public static final double kPositionClosedLoopKp = 1.2;
         public static final double kPositionClosedLoopKd = 0.0;
@@ -492,7 +533,7 @@ public final class Constants {
 
         public static final double kHomingMotorOutput = 0.06;
         public static final double kHomingCurrentThresholdAmps = 25.0;
-        public static final double kHomingMinRunTimeSeconds = 0.25;
+        public static final double kHomingMinRunTimeSeconds = 0.15;
         public static final double kHomingCurrentDebounceSeconds = 0.10;
         public static final double kHomingTimeoutSeconds = 10.0;
 

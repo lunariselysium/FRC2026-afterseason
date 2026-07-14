@@ -15,26 +15,46 @@ class AutoScoreIntakeAssistTest {
     void staysIdleUntilAutoScoreStartsFeeding() {
         AutoScoreIntakeAssist assist = new AutoScoreIntakeAssist();
 
-        IntakeRequest request = assist.update(true, false, false);
+        IntakeRequest request = assist.update(true, false, false, 10.0);
 
         assertEquals(IntakeRequest.IDLE, request);
     }
 
     @Test
-    void retractsAfterAutoScoreStartsFeedingWhenIntakeButtonIsNotPressed() {
+    void waitsInitialDelayBeforeOscillatingAfterAutoScoreStartsFeeding() {
         AutoScoreIntakeAssist assist = new AutoScoreIntakeAssist();
 
-        IntakeRequest request = assist.update(true, true, false);
+        assertEquals(IntakeRequest.IDLE, assist.update(true, true, false, 10.0));
+        assertEquals(IntakeRequest.IDLE, assist.update(true, true, false, 10.99));
 
-        assertEquals(IntakeRequest.AUTO_SCORE_RETRACTED, request);
+        assertEquals(
+            IntakeRequest.AUTO_SCORE_SEMI_DEPLOYED,
+            assist.update(true, true, false, 11.0)
+        );
+        assertEquals(
+            IntakeRequest.AUTO_SCORE_SEMI_DEPLOYED,
+            assist.update(true, true, false, 11.99)
+        );
+        assertEquals(
+            IntakeRequest.AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED,
+            assist.update(true, true, false, 12.0)
+        );
+        assertEquals(
+            IntakeRequest.AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED,
+            assist.update(true, true, false, 12.99)
+        );
+        assertEquals(
+            IntakeRequest.AUTO_SCORE_SEMI_DEPLOYED,
+            assist.update(true, true, false, 13.0)
+        );
     }
 
     @Test
     void keepsIntakeDeployedWhenDriverPressesIntakeButtonAfterFeedingStarts() {
         AutoScoreIntakeAssist assist = new AutoScoreIntakeAssist();
-        assist.update(true, true, false);
+        assist.update(true, true, false, 10.0);
 
-        IntakeRequest request = assist.update(true, false, true);
+        IntakeRequest request = assist.update(true, false, true, 10.1);
 
         assertEquals(IntakeRequest.DEPLOYED, request);
     }
@@ -42,9 +62,9 @@ class AutoScoreIntakeAssistTest {
     @Test
     void returnsToDeployedWhenAutoScoreEndsAfterFeedingStarted() {
         AutoScoreIntakeAssist assist = new AutoScoreIntakeAssist();
-        assist.update(true, true, false);
+        assist.update(true, true, false, 10.0);
 
-        IntakeRequest request = assist.update(false, false, false);
+        IntakeRequest request = assist.update(false, false, false, 10.1);
 
         assertEquals(IntakeRequest.DEPLOYED, request);
     }
@@ -52,10 +72,10 @@ class AutoScoreIntakeAssistTest {
     @Test
     void onlyRequestsDeployedOnceAfterAutoScoreEnds() {
         AutoScoreIntakeAssist assist = new AutoScoreIntakeAssist();
-        assist.update(true, true, false);
-        assist.update(false, false, false);
+        assist.update(true, true, false, 10.0);
+        assist.update(false, false, false, 10.1);
 
-        IntakeRequest request = assist.update(false, false, false);
+        IntakeRequest request = assist.update(false, false, false, 10.2);
 
         assertEquals(IntakeRequest.IDLE, request);
     }

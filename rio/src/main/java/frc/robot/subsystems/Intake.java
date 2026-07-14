@@ -47,6 +47,7 @@ public class Intake extends SubsystemBase {
     private final MotionMagicVoltage positionRequest = new MotionMagicVoltage(0.0);
 
     private boolean autoScoreRetractionMotionProfileActive;
+    private final PendingIntakeDeploy pendingDeploy = new PendingIntakeDeploy();
     private double targetPositionMotorRotations;
     private double appliedDeployMotorOutput;
     private double appliedDeployMechanismVoltage;
@@ -174,6 +175,7 @@ public class Intake extends SubsystemBase {
     }
 
     public void moveToStowedSetpoint() {
+        pendingDeploy.clear();
         if (!isPositionControlAllowed()) {
             targetPositionMotorRotations = getIntakePositionMotorRotations();
             positionControlActive = false;
@@ -191,11 +193,11 @@ public class Intake extends SubsystemBase {
 
     public void moveToDeployedSetpoint() {
         if (!isPositionControlAllowed()) {
-            targetPositionMotorRotations = getIntakePositionMotorRotations();
-            positionControlActive = false;
+            pendingDeploy.request();
             return;
         }
 
+        pendingDeploy.clear();
         homing = false;
         sysIdActive = false;
         useNormalDeployMotionProfile();
@@ -206,6 +208,15 @@ public class Intake extends SubsystemBase {
     }
 
     public void moveToAutoScoreRetractionSetpoint() {
+        moveToAutoScoreSetpoint(IntakeConstants.kAutoScoreRetractionSetpointMotorRotations);
+    }
+
+    public void moveToAutoScoreSeventyPercentDeployedSetpoint() {
+        moveToAutoScoreSetpoint(IntakeConstants.kAutoScoreOscillationSetpointMotorRotations);
+    }
+
+    private void moveToAutoScoreSetpoint(double targetMotorRotations) {
+        pendingDeploy.clear();
         if (!isPositionControlAllowed()) {
             targetPositionMotorRotations = getIntakePositionMotorRotations();
             positionControlActive = false;
@@ -217,7 +228,7 @@ public class Intake extends SubsystemBase {
         useAutoScoreRetractionMotionProfile();
         targetDeployed = false;
         resetDeployedHardstopCapture();
-        targetPositionMotorRotations = IntakeConstants.kAutoScoreRetractionSetpointMotorRotations;
+        targetPositionMotorRotations = targetMotorRotations;
         positionControlActive = true;
     }
 
@@ -248,6 +259,7 @@ public class Intake extends SubsystemBase {
 
     public void updateControlAndTelemetry() {
         if (DriverStation.isDisabled()) {
+            pendingDeploy.clear();
             if (homing) {
                 applyDeployOperatingCurrentLimits();
             }
@@ -263,6 +275,9 @@ public class Intake extends SubsystemBase {
             resetDeployedHardstopCapture();
         } else if (homing) {
             updateHomingControl();
+        } else if (pendingDeploy.consumeWhenAllowed(isPositionControlAllowed())) {
+            moveToDeployedSetpoint();
+            updatePositionControl();
         } else if (!isPositionControlAllowed()) {
             targetPositionMotorRotations = getIntakePositionMotorRotations();
             positionControlActive = false;
@@ -340,6 +355,7 @@ public class Intake extends SubsystemBase {
     }
 
     private void failHomingTimeout() {
+        pendingDeploy.clear();
         homing = false;
         homed = false;
         homingTimedOut = true;
@@ -357,6 +373,7 @@ public class Intake extends SubsystemBase {
     }
 
     private void prepareDeploySysId() {
+        pendingDeploy.clear();
         applyDeployOperatingCurrentLimits();
         homing = false;
         positionControlActive = false;

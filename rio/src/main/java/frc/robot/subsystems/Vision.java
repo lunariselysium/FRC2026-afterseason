@@ -28,14 +28,21 @@ import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.util.Units;
-import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.Constants.VisionConstants;
 
 public class Vision extends SubsystemBase {
+    private enum PoseFusionMode {
+        NORMAL,
+        SUPPRESSED,
+        RELOCALIZING
+    }
+
     private static final AprilTagFieldLayout kFieldLayout =
         AprilTagFieldLayout.loadField(VisionConstants.kAprilTagField);
 
@@ -45,6 +52,17 @@ public class Vision extends SubsystemBase {
     private final VisionCamera[] cameras;
     private final HubVisionObservation blueHubVision = new HubVisionObservation();
     private final HubVisionObservation redHubVision = new HubVisionObservation();
+    private final VisionPoseRelocalizer poseRelocalizer = new VisionPoseRelocalizer(
+        VisionConstants.kRelocalizationRequiredSampleCount,
+        VisionConstants.kRelocalizationMaxTranslationSpreadMeters,
+        VisionConstants.kRelocalizationMaxRotationSpreadRadians
+    );
+
+    private PoseFusionMode poseFusionMode = PoseFusionMode.NORMAL;
+    private Pose2d lastRelocalizedPose = Pose2d.kZero;
+    private double relocalizationStartTimestampSeconds = -1.0;
+    private int relocalizationRejectedEstimateCount;
+    private boolean poseRelocalized;
 
     public Vision(CommandSwerveDrivetrain drivetrain, Turret turret) {
         this.drivetrain = drivetrain;
@@ -82,12 +100,42 @@ public class Vision extends SubsystemBase {
         return getHubVisionObservation(alliance).getCorrectionDegreesIfFresh();
     }
 
+    public void suppressPoseFusionForBlindCrossing() {
+        poseFusionMode = PoseFusionMode.SUPPRESSED;
+        poseRelocalizer.reset();
+        relocalizationStartTimestampSeconds = -1.0;
+        poseRelocalized = false;
+    }
+
+    public void startPoseRelocalization() {
+        poseFusionMode = PoseFusionMode.RELOCALIZING;
+        poseRelocalizer.reset();
+        relocalizationStartTimestampSeconds = Timer.getFPGATimestamp();
+        relocalizationRejectedEstimateCount = 0;
+        poseRelocalized = false;
+    }
+
+    public boolean isPoseRelocalized() {
+        return poseRelocalized;
+    }
+
+    public void resumeNormalPoseFusion() {
+        poseFusionMode = PoseFusionMode.NORMAL;
+        poseRelocalizer.reset();
+        relocalizationStartTimestampSeconds = -1.0;
+    }
+
     public void updateControlAndTelemetry() {
+        if (!DriverStation.isAutonomousEnabled() && poseFusionMode != PoseFusionMode.NORMAL) {
+            resumeNormalPoseFusion();
+        }
+
         for (VisionCamera camera : cameras) {
             processCamera(camera);
             publishCameraTelemetry(camera);
         }
         publishTurretForwardHubVisionTelemetry();
+        publishPoseFusionTelemetry();
     }
 
     private Transform3d getRobotToTurretForwardCamera() {
@@ -138,6 +186,15 @@ public class Vision extends SubsystemBase {
                 continue;
             }
 
+            Pose2d estimatedPose2d = pose.estimatedPose.toPose2d();
+            if (poseFusionMode == PoseFusionMode.SUPPRESSED) {
+                continue;
+            }
+            if (poseFusionMode == PoseFusionMode.RELOCALIZING) {
+                processRelocalizationEstimate(camera, pose, estimatedPose2d);
+                continue;
+            }
+
             Matrix<N3, N1> stdDevs = getVisionStdDevs(
                 pose.targetsUsed.size(),
                 averageTagDistanceMeters,
@@ -145,13 +202,40 @@ public class Vision extends SubsystemBase {
             );
 
             drivetrain.addVisionMeasurement(
-                pose.estimatedPose.toPose2d(),
+                estimatedPose2d,
                 pose.timestampSeconds,
                 stdDevs
             );
 
             camera.fusedPoseCount++;
         }
+    }
+
+    private void processRelocalizationEstimate(
+        VisionCamera camera,
+        EstimatedRobotPose pose,
+        Pose2d estimatedPose2d
+    ) {
+        boolean validRelocalizationEstimate = !camera.dynamicRobotToCamera
+            && pose.timestampSeconds >= relocalizationStartTimestampSeconds
+            && pose.targetsUsed.size() >= VisionConstants.kRelocalizationMinimumTagCount
+            && Math.abs(pose.estimatedPose.getZ())
+                <= VisionConstants.kRelocalizationMaxPoseZErrorMeters;
+        if (!validRelocalizationEstimate) {
+            relocalizationRejectedEstimateCount++;
+            return;
+        }
+
+        Optional<Pose2d> lockedPose = poseRelocalizer.addSample(estimatedPose2d);
+        if (lockedPose.isEmpty()) {
+            return;
+        }
+
+        lastRelocalizedPose = lockedPose.get();
+        drivetrain.resetPose(lastRelocalizedPose);
+        poseRelocalized = true;
+        poseFusionMode = PoseFusionMode.NORMAL;
+        relocalizationStartTimestampSeconds = -1.0;
     }
 
     private void updateTurretForwardHubVisionAssist(
@@ -371,6 +455,25 @@ public class Vision extends SubsystemBase {
     private void publishTurretForwardHubVisionTelemetry() {
         publishHubVisionTelemetry("Vision/TurretForwardHubAssist/Blue", blueHubVision);
         publishHubVisionTelemetry("Vision/TurretForwardHubAssist/Red", redHubVision);
+    }
+
+    private void publishPoseFusionTelemetry() {
+        SmartDashboard.putString("Vision/PoseFusionMode", poseFusionMode.name());
+        SmartDashboard.putBoolean("Vision/PoseRelocalized", poseRelocalized);
+        SmartDashboard.putNumber(
+            "Vision/RelocalizationSampleCount",
+            poseRelocalizer.getSampleCount()
+        );
+        SmartDashboard.putNumber(
+            "Vision/RelocalizationRejectedEstimateCount",
+            relocalizationRejectedEstimateCount
+        );
+        SmartDashboard.putNumber("Vision/RelocalizedPoseX", lastRelocalizedPose.getX());
+        SmartDashboard.putNumber("Vision/RelocalizedPoseY", lastRelocalizedPose.getY());
+        SmartDashboard.putNumber(
+            "Vision/RelocalizedPoseDegrees",
+            lastRelocalizedPose.getRotation().getDegrees()
+        );
     }
 
     private void publishHubVisionTelemetry(

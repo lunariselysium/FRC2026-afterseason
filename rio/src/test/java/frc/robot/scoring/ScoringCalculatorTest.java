@@ -289,6 +289,19 @@ class ScoringCalculatorTest {
     }
 
     @Test
+    void hubShotCurveAllowsFeedingAtExtrapolatedFivePointSixMeterEndpoint() {
+        ShotSetpoint endpoint =
+            ScoringCalculator.evaluateShotCurve(5.6, ScoringConstants.kHubShotCurve, false);
+        ShotSetpoint tooFar =
+            ScoringCalculator.evaluateShotCurve(5.61, ScoringConstants.kHubShotCurve, false);
+
+        assertEquals(15.9102534776, endpoint.pitchDegrees(), kTolerance);
+        assertEquals(56.322988138, endpoint.flywheelRotationsPerSecond(), kTolerance);
+        assertTrue(endpoint.feedAllowedByDistance());
+        assertFalse(tooFar.feedAllowedByDistance());
+    }
+
+    @Test
     void passShotMapAllowsBoundedExtrapolation() {
         ShotMapPoint[] map = {
             new ShotMapPoint(1.0, 10.0, 25.0),

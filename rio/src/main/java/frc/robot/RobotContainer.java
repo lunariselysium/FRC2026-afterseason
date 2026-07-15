@@ -21,7 +21,6 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
-import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 
 import frc.robot.Constants.BumpCrossingConstants;
 import frc.robot.Constants.ScoringConstants;
@@ -30,7 +29,7 @@ import frc.robot.autonomous.BumpCrossingDirection;
 import frc.robot.autonomous.PathPlannerMechanismRequests;
 import frc.robot.commands.BlindBumpCrossingCommand;
 import frc.robot.commands.ScoreCommand;
-import frc.robot.commands.ShotAimCommand;
+import frc.robot.commands.ShotPrepCommand;
 import frc.robot.commands.VisionRelocalizeCommand;
 import frc.robot.generated.TunerConstants;
 import frc.robot.scoring.AutoScoreIntakeAssist;
@@ -50,9 +49,9 @@ public class RobotContainer {
     private static final Voltage kDriveSpeedTestVoltage = Volts.of(12.0);
 
     private final double maxSpeedMetersPerSecond =
-        TunerConstants.kSpeedAt12Volts.in(MetersPerSecond) * 0.2;
+        TunerConstants.kSpeedAt12Volts.in(MetersPerSecond);
     private final double maxAngularRateRadiansPerSecond =
-        RotationsPerSecond.of(0.75).in(RadiansPerSecond) * 0.6;
+        RotationsPerSecond.of(0.75).in(RadiansPerSecond);
 
     /* Setting up bindings for necessary control of the swerve drive platform */
     private final SwerveRequest.FieldCentric drive = new SwerveRequest.FieldCentric()
@@ -65,8 +64,10 @@ public class RobotContainer {
     private final CommandXboxController joystick = new CommandXboxController(0);
     private final Trigger backButton = joystick.back();
     private final Trigger startButton = joystick.start();
+    private final Trigger leftBumper = joystick.leftBumper();
     private final Trigger leftTrigger = joystick.leftTrigger();
     private final Trigger rightTrigger = joystick.rightTrigger();
+    private final Trigger rightBumper = joystick.rightBumper();
     private final Trigger rightStickButton = joystick.rightStick();
 
     public final CommandSwerveDrivetrain drivetrain = TunerConstants.createDrivetrain();
@@ -74,11 +75,13 @@ public class RobotContainer {
     public final Vision vision = new Vision(drivetrain, turret);
     public final Intake intake = new Intake();
     public final Feeder feeder = new Feeder();
-    private final ScoreCommand scoreCommand = new ScoreCommand(drivetrain, turret, feeder, vision);
+    private final ScoreCommand scoreCommand =
+        new ScoreCommand(drivetrain, turret, feeder, vision, this::isShotPrepRequested);
     private final AutoScoreIntakeAssist autoScoreIntakeAssist = new AutoScoreIntakeAssist();
     private final PathPlannerMechanismRequests pathPlannerMechanismRequests =
         new PathPlannerMechanismRequests();
     private boolean pathPlannerAutoScoreRunning;
+    private boolean autoScoreIntakeControlsRollers;
     private final ScoringTelemetry scoringTelemetry =
         new ScoringTelemetry(drivetrain, turret, vision);
     private final ShotTuningControls shotTuningControls = new ShotTuningControls(turret);
@@ -99,7 +102,7 @@ public class RobotContainer {
             PathPlannerAuto.currentPathName != null ? PathPlannerAuto.currentPathName : "NONE"
         );
         updatePathPlannerAutoScore();
-        shotTuningControls.update(isNormalScoringRequested(), leftTrigger.getAsBoolean());
+        shotTuningControls.update(isShootingControlRequested(), isShotPrepRequested());
         turret.updateControlAndTelemetry();
         vision.updateControlAndTelemetry();
         scoringTelemetry.update();
@@ -246,9 +249,10 @@ public class RobotContainer {
             .and(joystick.back().negate())
             .and(joystick.start().negate())
             .onTrue(Commands.runOnce(intake::startHoming, intake));
-        joystick.leftBumper()
+        rightBumper
             .and(joystick.back().negate())
             .and(joystick.start().negate())
+            .and(rightTrigger.negate())
             .whileTrue(
                 Commands.startEnd(
                     () -> {
@@ -259,15 +263,38 @@ public class RobotContainer {
                     intake
                 )
             );
-        rightTrigger.whileTrue(
-            turret.runFlywheelAtVelocityCommand(
-                shotTuningControls::getRequestedFlywheelRotationsPerSecond
-            )
-        );
+        leftTrigger
+            .and(leftBumper.negate())
+            .and(rightTrigger.negate())
+            .and(new Trigger(DriverStation::isTeleopEnabled))
+            .and(backButton.negate())
+            .and(startButton.negate())
+            .whileTrue(
+                new ShotPrepCommand(
+                    drivetrain,
+                    turret,
+                    vision,
+                    this::isAutoScoreRequested
+                )
+            );
+        rightTrigger
+            .and(new Trigger(DriverStation::isTeleopEnabled))
+            .and(backButton.negate())
+            .and(startButton.negate())
+            .whileTrue(
+                Commands.startEnd(
+                    this::runReverseShotPath,
+                    this::stopReverseShotPath,
+                    turret,
+                    feeder,
+                    intake
+                )
+            );
+        // Hold Y to X-lock only the drivetrain; mechanisms keep their normal controls.
         joystick.y()
             .and(joystick.back().negate())
             .and(joystick.start().negate())
-            .whileTrue(Commands.startEnd(feeder::runAll, feeder::stopAll, feeder));
+            .whileTrue(drivetrain.xBrakeCommand());
 
         // Test mode only: hold Back + Y to apply 12 V straight forward to the drive motors.
         // Releasing either button immediately commands 0 V before normal drive control resumes.
@@ -276,63 +303,26 @@ public class RobotContainer {
             .and(joystick.y())
             .whileTrue(drivetrain.driveForwardAtVoltageCommand(kDriveSpeedTestVoltage));
 
-        // var drivetrainTranslationSysId = joystick.leftBumper().negate().and(joystick.rightBumper().negate());
-        // var drivetrainSteerSysId = joystick.leftBumper().and(joystick.rightBumper().negate());
-        // var drivetrainRotationSysId = joystick.rightBumper().and(joystick.leftBumper().negate());
-
-        // // Drivetrain SysId: Back = dynamic, Start = quasistatic; Y = forward, X = reverse.
-        // // No bumper selects translation, left bumper selects steer, right bumper selects rotation.
-        // joystick.back().and(joystick.y()).and(drivetrainTranslationSysId)
-        //     .whileTrue(drivetrain.sysIdTranslationDynamic(Direction.kForward));
-        // joystick.back().and(joystick.x()).and(drivetrainTranslationSysId)
-        //     .whileTrue(drivetrain.sysIdTranslationDynamic(Direction.kReverse));
-        // joystick.start().and(joystick.y()).and(drivetrainTranslationSysId)
-        //     .whileTrue(drivetrain.sysIdTranslationQuasistatic(Direction.kForward));
-        // joystick.start().and(joystick.x()).and(drivetrainTranslationSysId)
-        //     .whileTrue(drivetrain.sysIdTranslationQuasistatic(Direction.kReverse));
-
-        // joystick.back().and(joystick.y()).and(drivetrainSteerSysId)
-        //     .whileTrue(drivetrain.sysIdSteerDynamic(Direction.kForward));
-        // joystick.back().and(joystick.x()).and(drivetrainSteerSysId)
-        //     .whileTrue(drivetrain.sysIdSteerDynamic(Direction.kReverse));
-        // joystick.start().and(joystick.y()).and(drivetrainSteerSysId)
-        //     .whileTrue(drivetrain.sysIdSteerQuasistatic(Direction.kForward));
-        // joystick.start().and(joystick.x()).and(drivetrainSteerSysId)
-        //     .whileTrue(drivetrain.sysIdSteerQuasistatic(Direction.kReverse));
-
-        // joystick.back().and(joystick.y()).and(drivetrainRotationSysId)
-        //     .whileTrue(drivetrain.sysIdRotationDynamic(Direction.kForward));
-        // joystick.back().and(joystick.x()).and(drivetrainRotationSysId)
-        //     .whileTrue(drivetrain.sysIdRotationDynamic(Direction.kReverse));
-        // joystick.start().and(joystick.y()).and(drivetrainRotationSysId)
-        //     .whileTrue(drivetrain.sysIdRotationQuasistatic(Direction.kForward));
-        // joystick.start().and(joystick.x()).and(drivetrainRotationSysId)
-        //     .whileTrue(drivetrain.sysIdRotationQuasistatic(Direction.kReverse));
-
-        // // Turret SysId chords use Back for dynamic tests and Start for quasistatic tests.
-        // joystick.back().and(joystick.povLeft()).whileTrue(turret.sysIdHeadingDynamic(Direction.kForward));
-        // joystick.back().and(joystick.povRight()).whileTrue(turret.sysIdHeadingDynamic(Direction.kReverse));
-        // joystick.start().and(joystick.povLeft()).whileTrue(turret.sysIdHeadingQuasistatic(Direction.kForward));
-        // joystick.start().and(joystick.povRight()).whileTrue(turret.sysIdHeadingQuasistatic(Direction.kReverse));
-
-        // joystick.back().and(joystick.povUp()).whileTrue(turret.sysIdPitchDynamic(Direction.kForward));
-        // joystick.back().and(joystick.povDown()).whileTrue(turret.sysIdPitchDynamic(Direction.kReverse));
-        // joystick.start().and(joystick.povUp()).whileTrue(turret.sysIdPitchQuasistatic(Direction.kForward));
-        // joystick.start().and(joystick.povDown()).whileTrue(turret.sysIdPitchQuasistatic(Direction.kReverse));
-
-        // joystick.back().and(joystick.b()).whileTrue(turret.sysIdFlywheelDynamic(Direction.kForward));
-        // joystick.back().and(joystick.a()).whileTrue(turret.sysIdFlywheelDynamic(Direction.kReverse));
-        // joystick.start().and(joystick.b()).whileTrue(turret.sysIdFlywheelQuasistatic(Direction.kForward));
-        // joystick.start().and(joystick.a()).whileTrue(turret.sysIdFlywheelQuasistatic(Direction.kReverse));
-
         joystick.povLeft()
+            .and(rightStickButton.negate())
             .and(joystick.back().negate())
             .and(joystick.start().negate())
             .onTrue(Commands.runOnce(this::stepTurretHeadingLeftFromPov));
         joystick.povRight()
+            .and(rightStickButton.negate())
             .and(joystick.back().negate())
             .and(joystick.start().negate())
             .onTrue(Commands.runOnce(this::stepTurretHeadingRightFromPov));
+        rightStickButton
+            .and(joystick.povLeft())
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .onTrue(Commands.runOnce(turret::shiftHeadingEncoderRotationLeft, turret));
+        rightStickButton
+            .and(joystick.povRight())
+            .and(joystick.back().negate())
+            .and(joystick.start().negate())
+            .onTrue(Commands.runOnce(turret::shiftHeadingEncoderRotationRight, turret));
         joystick.povUp()
             .and(joystick.back().negate())
             .and(joystick.start().negate())
@@ -345,27 +335,52 @@ public class RobotContainer {
             .and(joystick.back().negate())
             .and(joystick.start().negate())
             .onTrue(Commands.runOnce(turret::startPitchHoming));
-        leftTrigger
+        leftBumper
             .and(new Trigger(DriverStation::isTeleopEnabled))
             .and(backButton.negate())
             .and(startButton.negate())
+            .and(rightTrigger.negate())
             .whileTrue(scoreCommand);
-        startButton
-            .and(backButton.negate())
-            .and(leftTrigger)
-            .whileTrue(new ShotAimCommand(drivetrain, turret, vision));
-        // joystick.leftBumper()
-        //     .and(joystick.back().negate())
-        //     .and(joystick.start().negate())
-        //     .whileTrue(Commands.startEnd(turret::runSerializer, turret::stopSerializer));
-
         drivetrain.registerTelemetry(logger::telemeterize);
     }
 
-    private boolean isNormalScoringRequested() {
+    private boolean isAutoScoreRequested() {
+        return leftBumper.getAsBoolean()
+            && !rightTrigger.getAsBoolean()
+            && !backButton.getAsBoolean()
+            && !startButton.getAsBoolean();
+    }
+
+    private boolean isShotPrepRequested() {
+        return leftTrigger.getAsBoolean()
+            && !leftBumper.getAsBoolean()
+            && !rightTrigger.getAsBoolean()
+            && !backButton.getAsBoolean()
+            && !startButton.getAsBoolean();
+    }
+
+    private boolean isReverseShotPathRequested() {
         return rightTrigger.getAsBoolean()
             && !backButton.getAsBoolean()
             && !startButton.getAsBoolean();
+    }
+
+    private boolean isShootingControlRequested() {
+        return isAutoScoreRequested()
+            || isShotPrepRequested()
+            || isReverseShotPathRequested();
+    }
+
+    private void runReverseShotPath() {
+        turret.reverseSerializer();
+        feeder.reverseAll();
+        intake.runRollersOut();
+    }
+
+    private void stopReverseShotPath() {
+        turret.stopSerializer();
+        feeder.stopAll();
+        intake.stopRollers();
     }
 
     private void stepTurretHeadingLeftFromPov() {
@@ -385,7 +400,8 @@ public class RobotContainer {
     }
 
     private boolean isIntakeButtonRequested() {
-        return joystick.leftBumper().getAsBoolean()
+        return rightBumper.getAsBoolean()
+            && !rightTrigger.getAsBoolean()
             && !backButton.getAsBoolean()
             && !startButton.getAsBoolean();
     }
@@ -404,6 +420,17 @@ public class RobotContainer {
             case AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED ->
                 intake.moveToAutoScoreSeventyPercentDeployedSetpoint();
             case IDLE -> {
+            }
+        }
+
+        boolean autoScoreControlsRollers = scoreCommand.isActive() && intakeRequest.runsRollers();
+        if (autoScoreControlsRollers) {
+            intake.runRollersIn();
+            autoScoreIntakeControlsRollers = true;
+        } else if (autoScoreIntakeControlsRollers) {
+            autoScoreIntakeControlsRollers = false;
+            if (!isIntakeButtonRequested()) {
+                intake.stopRollers();
             }
         }
     }

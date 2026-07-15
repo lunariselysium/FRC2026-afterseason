@@ -5,12 +5,22 @@
 package frc.robot.scoring;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
 import frc.robot.scoring.AutoScoreIntakeAssist.IntakeRequest;
 
 class AutoScoreIntakeAssistTest {
+    @Test
+    void requestsRollersWhileAutoScoreControlsIntakePosition() {
+        assertFalse(IntakeRequest.IDLE.runsRollers());
+        assertTrue(IntakeRequest.DEPLOYED.runsRollers());
+        assertTrue(IntakeRequest.AUTO_SCORE_SEMI_DEPLOYED.runsRollers());
+        assertTrue(IntakeRequest.AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED.runsRollers());
+    }
+
     @Test
     void staysIdleUntilAutoScoreStartsFeeding() {
         AutoScoreIntakeAssist assist = new AutoScoreIntakeAssist();

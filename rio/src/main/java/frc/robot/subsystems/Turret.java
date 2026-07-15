@@ -93,6 +93,14 @@ public class Turret extends SubsystemBase {
         heading.resetEncoderRotationToTargetHeading();
     }
 
+    public void shiftHeadingEncoderRotationLeft() {
+        heading.shiftEncoderRotationTowardPositiveHeading();
+    }
+
+    public void shiftHeadingEncoderRotationRight() {
+        heading.shiftEncoderRotationTowardNegativeHeading();
+    }
+
     public double getHeadingDegrees() {
         return heading.getHeadingDegrees();
     }
@@ -190,6 +198,14 @@ public class Turret extends SubsystemBase {
 
     public void runSerializer() {
         serializer.run();
+    }
+
+    public void runSerializerAtScale(double outputScale) {
+        serializer.runAtScale(outputScale);
+    }
+
+    public void reverseSerializer() {
+        serializer.reverse();
     }
 
     public void stopSerializer() {

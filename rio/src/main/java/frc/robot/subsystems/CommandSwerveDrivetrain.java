@@ -62,6 +62,9 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     private final SwerveRequest.ApplyRobotSpeeds m_pathApplyRobotSpeeds =
         new SwerveRequest.ApplyRobotSpeeds()
             .withDriveRequestType(DriveRequestType.Velocity);
+    private final SwerveRequest.SwerveDriveBrake m_swerveDriveBrake =
+        new SwerveRequest.SwerveDriveBrake()
+            .withDriveRequestType(DriveRequestType.OpenLoopVoltage);
 
     /* SysId routine for characterizing translation. This is used to find PID gains for the drive motors. */
     private final SysIdRoutine m_sysIdRoutineTranslation = new SysIdRoutine(
@@ -264,6 +267,15 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
      */
     public Command applyRequest(Supplier<SwerveRequest> request) {
         return run(() -> this.setControl(request.get()));
+    }
+
+    /**
+     * Points the modules into CTRE's inward "X" brake while scheduled.
+     *
+     * @return Command to hold the drivetrain in an X brake
+     */
+    public Command xBrakeCommand() {
+        return applyRequest(() -> m_swerveDriveBrake);
     }
 
     /** Lowers drive supply current while shooter motors are accelerating or feeding. */

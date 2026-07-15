@@ -43,6 +43,34 @@ class TurretFlywheelMathTest {
     }
 
     @Test
+    void shootingReadinessAllowsAnAdditionalThreeRpsUnderspeedButNoExtraOverspeed() {
+        assertTrue(TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
+            42.0,
+            34.0,
+            8.0,
+            5.0
+        ));
+        assertFalse(TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
+            42.0,
+            33.9,
+            8.0,
+            5.0
+        ));
+        assertTrue(TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
+            42.0,
+            47.0,
+            8.0,
+            5.0
+        ));
+        assertFalse(TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
+            42.0,
+            47.1,
+            8.0,
+            5.0
+        ));
+    }
+
+    @Test
     void appliesFeedingLoadFeedforwardOnlyWhileFeeding() {
         assertTrue(TurretFlywheelMath.getFeedingLoadFeedforwardVolts(
             true,

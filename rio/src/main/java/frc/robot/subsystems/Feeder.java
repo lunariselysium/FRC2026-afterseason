@@ -79,6 +79,24 @@ public class Feeder extends SubsystemBase {
         );
     }
 
+    public void runAllWithUpperFeedScale(double upperFeedOutputScale) {
+        TargetOutputs outputs = calculateUpperFeedScaledOutputs(upperFeedOutputScale);
+        setTargetOutputs(
+            outputs.floorOutput(),
+            outputs.beltOutput(),
+            outputs.handoffWheelOutput()
+        );
+    }
+
+    public void reverseAll() {
+        TargetOutputs outputs = calculateReversedOutputs();
+        setTargetOutputs(
+            outputs.floorOutput(),
+            outputs.beltOutput(),
+            outputs.handoffWheelOutput()
+        );
+    }
+
     public void runFloor() {
         setFloorOutput(FeederConstants.kFloorMotorOutput);
     }
@@ -179,6 +197,29 @@ public class Feeder extends SubsystemBase {
     private double clampMotorOutput(double motorOutput) {
         return MathUtil.clamp(motorOutput, -1.0, 1.0);
     }
+
+    static TargetOutputs calculateUpperFeedScaledOutputs(double upperFeedOutputScale) {
+        double clampedOutputScale = MathUtil.clamp(upperFeedOutputScale, 0.0, 1.0);
+        return new TargetOutputs(
+            FeederConstants.kFloorMotorOutput,
+            FeederConstants.kBeltMotorOutput * clampedOutputScale,
+            FeederConstants.kHandoffWheelMotorOutput * clampedOutputScale
+        );
+    }
+
+    static TargetOutputs calculateReversedOutputs() {
+        return new TargetOutputs(
+            -FeederConstants.kFloorMotorOutput,
+            -FeederConstants.kBeltMotorOutput,
+            -FeederConstants.kHandoffWheelMotorOutput
+        );
+    }
+
+    record TargetOutputs(
+        double floorOutput,
+        double beltOutput,
+        double handoffWheelOutput
+    ) {}
 
     private void setFloorMotorOutput(double floorOutput) {
         appliedFloorOutput = FeederConstants.kFloorMotorOutputSign * floorOutput;

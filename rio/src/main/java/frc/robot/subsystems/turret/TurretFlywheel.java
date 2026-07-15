@@ -200,9 +200,11 @@ public class TurretFlywheel {
 
     public boolean isReadyToShoot() {
         return running
-            && TurretFlywheelMath.isWithinVelocityTolerance(
+            && TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
                 targetVelocityRotationsPerSecond,
                 getVelocityRotationsPerSecond(),
+                TurretFlywheelConstants.kReadyVelocityToleranceRotationsPerSecond
+                    + TurretFlywheelConstants.kReadyAdditionalUnderspeedToleranceRotationsPerSecond,
                 TurretFlywheelConstants.kReadyVelocityToleranceRotationsPerSecond
             );
     }

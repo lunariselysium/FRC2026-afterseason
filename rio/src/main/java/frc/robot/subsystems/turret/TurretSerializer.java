@@ -10,6 +10,7 @@ import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.wpilibj.DriverStation;
 import frc.robot.Constants.TurretSerializerConstants;
 
@@ -19,7 +20,7 @@ public class TurretSerializer {
         new CANBus(TurretSerializerConstants.kMotorCanBus)
     );
 
-    private boolean running;
+    private double targetMotorOutput;
     private double appliedMotorOutput;
 
     public TurretSerializer() {
@@ -36,34 +37,47 @@ public class TurretSerializer {
     }
 
     public void run() {
-        running = true;
+        runAtScale(1.0);
+    }
+
+    public void runAtScale(double outputScale) {
+        targetMotorOutput = TurretSerializerConstants.kMotorOutput
+            * MathUtil.clamp(outputScale, 0.0, 1.0);
+    }
+
+    public void reverse() {
+        targetMotorOutput = calculateReverseOutput();
     }
 
     public void stop() {
-        running = false;
+        targetMotorOutput = 0.0;
     }
 
     public void updateControl() {
         if (DriverStation.isDisabled()) {
-            running = false;
+            stop();
             setMotorOutput(0.0);
             return;
         }
 
-        if (!running) {
+        if (!isRunning()) {
             setMotorOutput(0.0);
             return;
         }
 
-        setMotorOutput(TurretSerializerConstants.kMotorOutput);
+        setMotorOutput(targetMotorOutput);
     }
 
     public boolean isRunning() {
-        return running;
+        return targetMotorOutput != 0.0;
     }
 
     public double getAppliedMotorOutput() {
         return appliedMotorOutput;
+    }
+
+    static double calculateReverseOutput() {
+        return -TurretSerializerConstants.kMotorOutput;
     }
 
     private void setMotorOutput(double motorOutput) {

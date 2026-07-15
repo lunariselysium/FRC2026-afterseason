@@ -199,6 +199,14 @@ public class TurretHeading {
         syncMotorEncoderFallbackOffset();
     }
 
+    public void shiftEncoderRotationTowardPositiveHeading() {
+        shiftEncoderRotationTowardHeadingDirection(1.0);
+    }
+
+    public void shiftEncoderRotationTowardNegativeHeading() {
+        shiftEncoderRotationTowardHeadingDirection(-1.0);
+    }
+
     public void prepareSysId() {
         holdCurrentHeading();
         sysIdActive = false;
@@ -329,6 +337,23 @@ public class TurretHeading {
 
         unwrappedEncoderRotationsFromForward += deltaRotations;
         previousRawEncoderRotations = rawEncoderRotations;
+    }
+
+    private void shiftEncoderRotationTowardHeadingDirection(double headingDirection) {
+        if (!encoderWasPresentAtStartup || !isEncoderConnected()) {
+            return;
+        }
+
+        previousRawEncoderRotations = getRawEncoderRotations();
+        unwrappedEncoderRotationsFromForward =
+            TurretHeadingMath.shiftEncoderRotationTowardHeadingDirection(
+                unwrappedEncoderRotationsFromForward,
+                headingDirection,
+                getHeadingDegreesPerEncoderRotation()
+            );
+        usingMotorEncoderFallback = false;
+        lastEncoderConnected = true;
+        syncMotorEncoderFallbackOffset();
     }
 
     private void alignThroughBoreUnwrapToMotorFallback() {

@@ -138,8 +138,8 @@ public final class Constants {
          * Initial robot-relative bump-crossing values. Direction is selected by
          * the PathPlanner named command.
          */
-        public static final double kCrossingSpeedMetersPerSecond = 1.5;
-        public static final double kCrossingDriveTimeSeconds = 2.4;
+        public static final double kCrossingSpeedMetersPerSecond = 2.5;
+        public static final double kCrossingDriveTimeSeconds = 2.0;
         public static final double kMaximumDriveTimeSeconds = 2.4;
         public static final double kRelocalizationWarningSeconds = 1.2;
     }
@@ -147,8 +147,8 @@ public final class Constants {
     public static final class DriveConstants {
         private DriveConstants() {}
 
-        public static final double kNormalSupplyCurrentLimitAmps = 70.0;
-        public static final double kShootingSupplyCurrentLimitAmps = 40.0;
+        public static final double kNormalSupplyCurrentLimitAmps = 40.0;
+        public static final double kShootingSupplyCurrentLimitAmps = 5.0;
     }
 
     public static final class AutoConstants {
@@ -236,6 +236,10 @@ public final class Constants {
         public static final double kHubVisionAssistStaleSeconds = 0.10;
 
         public static final int kReadyDebounceCycles = 5;
+        // Nominal 20 ms score-command cycles.
+        public static final int kFlywheelReducedFeedCycles = 5;
+        public static final int kFlywheelResumeReadyCycles = 2;
+        public static final double kReducedFeedOutputScale = 0.60;
         public static final double kShotMotionPredictionSeconds = 0.12;
         public static final double kShotTimeOfFlightSeconds = 1.0;
 
@@ -244,13 +248,15 @@ public final class Constants {
         public static final double kMinShotFlywheelRotationsPerSecond = 20.0;
         public static final double kMaxShotFlywheelRotationsPerSecond = 60.0;
 
-        // Hub map is measured; pass map is provisional until calibrated.
+        // Hub map is measured through 4.63 m; the 5.60 m endpoint bounds polynomial extrapolation.
+        // Pass map is provisional until calibrated.
         public static final ShotMapPoint[] kHubShotMap = {
             new ShotMapPoint(1.74, 4.8, 40.0),
             new ShotMapPoint(2.30, 9.8, 40.0),
             new ShotMapPoint(3.00, 17.0, 43.0),
             new ShotMapPoint(3.90, 20.0, 47.0),
             new ShotMapPoint(4.63, 20.0, 50.0),
+            new ShotMapPoint(5.60, 15.9102534776, 56.322988138),
         };
         public static final ShotMapPoint[] kPassShotMap = {
             new ShotMapPoint(2.3, 35, 32),
@@ -440,6 +446,7 @@ public final class Constants {
         public static final double kTargetVelocityRotationsPerSecond = 42.0;
         public static final double kVelocityToleranceRotationsPerSecond = 2.0;
         public static final double kReadyVelocityToleranceRotationsPerSecond = 5.0;
+        public static final double kReadyAdditionalUnderspeedToleranceRotationsPerSecond = 3.0;
         public static final double kFlywheelKp = 0.16;
         public static final double kFlywheelKv = 0.11285;
         public static final double kFlywheelKa = 0.0028782;
@@ -505,10 +512,10 @@ public final class Constants {
         public static final double kRackPinionGearTeeth = 27.0;
 
         public static final double kDeployedSetpointMotorRotations = 20.8;
-        public static final double kAutoScoreRetractionDeployedFraction = 0.30;
+        public static final double kAutoScoreRetractionDeployedFraction = 0.50;
         public static final double kAutoScoreRetractionSetpointMotorRotations =
             kDeployedSetpointMotorRotations * kAutoScoreRetractionDeployedFraction;
-        public static final double kAutoScoreOscillationDeployedFraction = 0.70;
+        public static final double kAutoScoreOscillationDeployedFraction = 0.80;
         public static final double kAutoScoreOscillationSetpointMotorRotations =
             kDeployedSetpointMotorRotations * kAutoScoreOscillationDeployedFraction;
         public static final double kAutoScoreRetractionDelaySeconds = 1.0;
@@ -521,10 +528,10 @@ public final class Constants {
         public static final double kPositionClosedLoopKa = 0.006;
         // CTRE motor-output voltage; positive retracts/stows this mechanism.
         public static final double kStowAssistFeedForwardVolts = 0.5;
-        public static final double kMotionMagicCruiseVelocityMotorRotationsPerSecond = 36.0;
-        public static final double kMotionMagicAccelerationMotorRotationsPerSecondSquared = 72.0;
-        public static final double kAutoScoreRetractionCruiseVelocityMotorRotationsPerSecond = 12.0;
-        public static final double kAutoScoreRetractionAccelerationMotorRotationsPerSecondSquared = 24.0;
+        public static final double kMotionMagicCruiseVelocityMotorRotationsPerSecond = 72.0;
+        public static final double kMotionMagicAccelerationMotorRotationsPerSecondSquared = 144.0;
+        public static final double kAutoScoreRetractionCruiseVelocityMotorRotationsPerSecond = 8.0;
+        public static final double kAutoScoreRetractionAccelerationMotorRotationsPerSecondSquared = 16.0;
         public static final double kDeployedHardstopCaptureCurrentThresholdAmps = 15.0;
         public static final double kDeployedHardstopCaptureWindowMotorRotations = 1.2;
 
@@ -548,7 +555,7 @@ public final class Constants {
         public static final double kSysIdDynamicStepVolts = 2.0;
         public static final double kSysIdTimeoutSeconds = 10.0;
 
-        public static final double kRollerMotorOutput = 0.7;
+        public static final double kRollerMotorOutput = 0.95;
         // Preserves the previous right-follower direction now that the right roller is the lead.
         public static final double kRightRollerMotorOutputSign = -1.0;
         public static final double kRollerSupplyCurrentLimitAmps = 25.0;

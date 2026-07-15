@@ -99,6 +99,30 @@ class TurretHeadingMathTest {
         );
     }
 
+    @Test
+    void shiftsEncoderTurnTowardRequestedHeadingDirection() {
+        double headingDegreesPerEncoderRotation = -56.0;
+
+        assertEquals(
+            -0.9,
+            TurretHeadingMath.shiftEncoderRotationTowardHeadingDirection(
+                0.1,
+                1.0,
+                headingDegreesPerEncoderRotation
+            ),
+            kTolerance
+        );
+        assertEquals(
+            1.1,
+            TurretHeadingMath.shiftEncoderRotationTowardHeadingDirection(
+                0.1,
+                -1.0,
+                headingDegreesPerEncoderRotation
+            ),
+            kTolerance
+        );
+    }
+
     private static void assertNearestEquivalent(
         double expectedHeadingDegrees,
         double requestedHeadingDegrees,

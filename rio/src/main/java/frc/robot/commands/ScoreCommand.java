@@ -6,6 +6,7 @@ package frc.robot.commands;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.function.BooleanSupplier;
 
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -26,8 +27,13 @@ public class ScoreCommand extends Command {
     private final Turret turret;
     private final Feeder feeder;
     private final Vision vision;
+    private final BooleanSupplier shotPrepRequestedSupplier;
+    private final FeedControlStateMachine feedController = new FeedControlStateMachine(
+        ScoringConstants.kReadyDebounceCycles,
+        ScoringConstants.kFlywheelReducedFeedCycles,
+        ScoringConstants.kFlywheelResumeReadyCycles
+    );
 
-    private int readyCycles;
     private boolean active;
     private boolean feeding;
 
@@ -35,12 +41,14 @@ public class ScoreCommand extends Command {
         CommandSwerveDrivetrain drivetrain,
         Turret turret,
         Feeder feeder,
-        Vision vision
+        Vision vision,
+        BooleanSupplier shotPrepRequestedSupplier
     ) {
         this.drivetrain = drivetrain;
         this.turret = turret;
         this.feeder = feeder;
         this.vision = vision;
+        this.shotPrepRequestedSupplier = shotPrepRequestedSupplier;
 
         addRequirements(turret, feeder);
     }
@@ -49,17 +57,16 @@ public class ScoreCommand extends Command {
     public void initialize() {
         active = true;
         feeding = false;
-        readyCycles = 0;
+        feedController.reset();
         drivetrain.useShootingDriveCurrentLimit();
         stopFeeding();
-        turret.stopShotOutputs();
     }
 
     @Override
     public void execute() {
         Optional<Alliance> alliance = DriverStation.getAlliance();
         if (alliance.isEmpty()) {
-            readyCycles = 0;
+            feedController.reset();
             feeding = false;
             stopFeeding();
             turret.stopShotOutputs();
@@ -92,35 +99,33 @@ public class ScoreCommand extends Command {
             target.shotSetpoint().flywheelRotationsPerSecond()
         );
 
-        boolean ready = target.shotSetpoint().feedAllowedByDistance()
+        boolean feedInterlocksReady = target.shotSetpoint().feedAllowedByDistance()
             && turret.isHeadingAtTarget()
-            && turret.isPitchAtTarget()
-            && turret.isFlywheelReadyToShoot();
-        if (ready) {
-            readyCycles++;
-        } else {
-            readyCycles = 0;
-        }
+            && turret.isPitchAtTarget();
+        boolean flywheelReady = turret.isFlywheelReadyToShoot();
+        boolean ready = feedInterlocksReady && flywheelReady;
+        FeedControlStateMachine.OutputMode feedMode = feedController.update(
+            feedInterlocksReady,
+            flywheelReady
+        );
+        feeding = feedMode != FeedControlStateMachine.OutputMode.STOPPED;
+        applyFeedMode(feedMode);
 
-        boolean shouldFeed = readyCycles >= ScoringConstants.kReadyDebounceCycles;
-        feeding = shouldFeed;
-        if (shouldFeed) {
-            feeder.runAll();
-            turret.runSerializer();
-        } else {
-            stopFeeding();
-        }
-
-        publishTargetTelemetry(target, hubVisionCorrectionDegrees, ready, shouldFeed);
+        publishTargetTelemetry(target, hubVisionCorrectionDegrees, ready, feedMode);
     }
 
     @Override
     public void end(boolean interrupted) {
         active = false;
         feeding = false;
-        readyCycles = 0;
+        feedController.reset();
         stopFeeding();
-        turret.stopShotOutputs();
+        if (!ShotHandoffPolicy.shouldKeepFlywheelRunning(
+            false,
+            shotPrepRequestedSupplier.getAsBoolean()
+        )) {
+            turret.stopFlywheel();
+        }
         drivetrain.useNormalDriveCurrentLimit();
         publishIdleTelemetry(interrupted ? "INTERRUPTED" : "ENDED");
     }
@@ -143,11 +148,25 @@ public class ScoreCommand extends Command {
         turret.stopSerializer();
     }
 
+    private void applyFeedMode(FeedControlStateMachine.OutputMode feedMode) {
+        switch (feedMode) {
+            case FULL -> {
+                feeder.runAll();
+                turret.runSerializer();
+            }
+            case REDUCED -> {
+                feeder.runAllWithUpperFeedScale(ScoringConstants.kReducedFeedOutputScale);
+                turret.runSerializerAtScale(ScoringConstants.kReducedFeedOutputScale);
+            }
+            case STOPPED -> stopFeeding();
+        }
+    }
+
     private void publishTargetTelemetry(
         ScoringTarget target,
         OptionalDouble hubVisionCorrectionDegrees,
         boolean ready,
-        boolean feeding
+        FeedControlStateMachine.OutputMode feedMode
     ) {
         SmartDashboard.putString("Scoring/Status", "ACTIVE");
         SmartDashboard.putString("Scoring/TargetMode", target.mode().name());
@@ -198,8 +217,13 @@ public class ScoreCommand extends Command {
         SmartDashboard.putBoolean("Scoring/PitchReady", turret.isPitchAtTarget());
         SmartDashboard.putBoolean("Scoring/FlywheelReady", turret.isFlywheelReadyToShoot());
         SmartDashboard.putBoolean("Scoring/FlywheelAtTarget", turret.isFlywheelAtTarget());
-        SmartDashboard.putNumber("Scoring/ReadyCycles", readyCycles);
+        SmartDashboard.putNumber("Scoring/ReadyCycles", feedController.getGoodCycles());
         SmartDashboard.putBoolean("Scoring/Ready", ready);
+        SmartDashboard.putString("Scoring/FeedMode", feedMode.name());
+        SmartDashboard.putNumber(
+            "Scoring/FlywheelOutOfRangeCycles",
+            feedController.getOutOfRangeCycles()
+        );
         SmartDashboard.putBoolean("Scoring/Feeding", feeding);
     }
 
@@ -207,6 +231,8 @@ public class ScoreCommand extends Command {
         SmartDashboard.putString("Scoring/Status", status);
         SmartDashboard.putBoolean("Scoring/Ready", false);
         SmartDashboard.putBoolean("Scoring/Feeding", false);
-        SmartDashboard.putNumber("Scoring/ReadyCycles", readyCycles);
+        SmartDashboard.putString("Scoring/FeedMode", FeedControlStateMachine.OutputMode.STOPPED.name());
+        SmartDashboard.putNumber("Scoring/ReadyCycles", feedController.getGoodCycles());
+        SmartDashboard.putNumber("Scoring/FlywheelOutOfRangeCycles", 0.0);
     }
 }

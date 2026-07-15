@@ -8,10 +8,20 @@ import frc.robot.Constants.IntakeConstants;
 
 public class AutoScoreIntakeAssist {
     public enum IntakeRequest {
-        IDLE,
-        DEPLOYED,
-        AUTO_SCORE_SEMI_DEPLOYED,
-        AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED
+        IDLE(false),
+        DEPLOYED(true),
+        AUTO_SCORE_SEMI_DEPLOYED(true),
+        AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED(true);
+
+        private final boolean runsRollers;
+
+        IntakeRequest(boolean runsRollers) {
+            this.runsRollers = runsRollers;
+        }
+
+        public boolean runsRollers() {
+            return runsRollers;
+        }
     }
 
     private boolean autoScoreWasActive;

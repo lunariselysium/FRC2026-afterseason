@@ -122,6 +122,18 @@
                     {
                       "type": "named",
                       "data": {
+                        "name": "Intake Retract"
+                      }
+                    },
+                    {
+                      "type": "wait",
+                      "data": {
+                        "waitTime": 2.0
+                      }
+                    },
+                    {
+                      "type": "named",
+                      "data": {
                         "name": "Intake Deploy"
                       }
                     },
@@ -138,28 +150,41 @@
           }
         },
         {
-          "type": "named",
-          "data": {
-            "name": "Bump Cross Forward Left"
-          }
-        },
-        {
           "type": "parallel",
           "data": {
             "commands": [
               {
-                "type": "path",
+                "type": "named",
                 "data": {
-                  "pathName": "5"
+                  "name": "Bump Cross Forward Left"
                 }
               },
               {
-                "type": "named",
+                "type": "sequential",
                 "data": {
-                  "name": "Auto Score Start"
+                  "commands": [
+                    {
+                      "type": "wait",
+                      "data": {
+                        "waitTime": 1.6
+                      }
+                    },
+                    {
+                      "type": "named",
+                      "data": {
+                        "name": "Auto Score Start"
+                      }
+                    }
+                  ]
                 }
               }
             ]
+          }
+        },
+        {
+          "type": "path",
+          "data": {
+            "pathName": "5"
           }
         }
       ]

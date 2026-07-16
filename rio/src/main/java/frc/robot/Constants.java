@@ -139,8 +139,8 @@ public final class Constants {
          * the PathPlanner named command.
          */
         public static final double kCrossingSpeedMetersPerSecond = 2.5;
-        public static final double kCrossingDriveTimeSeconds = 2.1;
-        public static final double kMaximumDriveTimeSeconds = 2.1;
+        public static final double kCrossingDriveTimeSeconds = 1.8;
+        public static final double kMaximumDriveTimeSeconds = 1.8;
         public static final double kRelocalizationWarningSeconds = 1.2;
     }
 
@@ -159,10 +159,10 @@ public final class Constants {
          * has not supplied characterized PathPlanner translation/rotation gains.
          * Tune them before relying on closed-loop path accuracy.
          */
-        public static final double kPathTranslationKp = 3.0;
+        public static final double kPathTranslationKp = 8.0;
         public static final double kPathTranslationKi = 0.0;
         public static final double kPathTranslationKd = 0.0;
-        public static final double kPathRotationKp = 4.0;
+        public static final double kPathRotationKp = 12.0;
         public static final double kPathRotationKi = 0.0;
         public static final double kPathRotationKd = 0.0;
     }

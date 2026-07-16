@@ -29,6 +29,7 @@ public class TurretHeading {
     );
 
     private double previousRawEncoderRotations;
+    private double previousRawMotorEncoderHeadingDegrees;
     private double unwrappedEncoderRotationsFromForward;
     private double targetHeadingDegrees;
     private double profiledHeadingDegrees;
@@ -38,11 +39,14 @@ public class TurretHeading {
     private double motorEncoderFallbackHeadingOffsetDegrees;
     private double appliedMotorOutput;
     private double appliedSysIdMechanismVoltage;
+    private double encoderMotorGuidanceErrorDegrees;
+    private int motorEncoderGuidanceCorrectionCount;
     private boolean encoderWasPresentAtStartup;
     private boolean startupEncoderCheckComplete;
     private boolean usingMotorEncoderFallback;
     private boolean lastEncoderConnected;
     private boolean sysIdActive;
+    private boolean usedMotorEncoderGuidance;
     private boolean reportedStartupEncoderFault;
     private boolean reportedFallbackWarning;
     private boolean reportedSysIdNotAllowedWarning;
@@ -66,6 +70,7 @@ public class TurretHeading {
 
         startupTimestampSeconds = Timer.getFPGATimestamp();
         lastProfileUpdateTimeSeconds = Timer.getFPGATimestamp();
+        previousRawMotorEncoderHeadingDegrees = getRawMotorEncoderHeadingDegrees();
 
         if (isEncoderConnected()) {
             initializeHeadingFromThroughBore();
@@ -125,6 +130,16 @@ public class TurretHeading {
         return unwrappedEncoderRotationsFromForward * getHeadingDegreesPerEncoderRotation();
     }
 
+    public double getRawThroughBoreEncoderRotations() {
+        return getRawEncoderRotations();
+    }
+
+    public double getRawThroughBoreEncoderDegrees() {
+        return TurretHeadingMath.encoderRotationsToDegrees(
+            getRawThroughBoreEncoderRotations()
+        );
+    }
+
     public double getTargetHeadingDegrees() {
         return targetHeadingDegrees;
     }
@@ -150,6 +165,18 @@ public class TurretHeading {
 
     public double getAppliedSysIdMechanismVoltage() {
         return appliedSysIdMechanismVoltage;
+    }
+
+    public double getEncoderMotorGuidanceErrorDegrees() {
+        return encoderMotorGuidanceErrorDegrees;
+    }
+
+    public boolean didUseMotorEncoderGuidance() {
+        return usedMotorEncoderGuidance;
+    }
+
+    public int getMotorEncoderGuidanceCorrectionCount() {
+        return motorEncoderGuidanceCorrectionCount;
     }
 
     public double getMeasuredMechanismVoltage() {
@@ -188,6 +215,7 @@ public class TurretHeading {
         }
 
         previousRawEncoderRotations = getRawEncoderRotations();
+        previousRawMotorEncoderHeadingDegrees = getRawMotorEncoderHeadingDegrees();
         unwrappedEncoderRotationsFromForward =
             TurretHeadingMath.chooseNearestEquivalentEncoderRotationsFromForward(
                 previousRawEncoderRotations - getForwardEncoderOffsetRotations(),
@@ -196,6 +224,8 @@ public class TurretHeading {
             );
         usingMotorEncoderFallback = false;
         lastEncoderConnected = true;
+        encoderMotorGuidanceErrorDegrees = 0.0;
+        usedMotorEncoderGuidance = false;
         syncMotorEncoderFallbackOffset();
     }
 
@@ -283,12 +313,17 @@ public class TurretHeading {
 
     private void initializeHeadingFromThroughBore() {
         previousRawEncoderRotations = getRawEncoderRotations();
-        unwrappedEncoderRotationsFromForward = MathUtil.inputModulus(
-            previousRawEncoderRotations - getForwardEncoderOffsetRotations(),
-            -0.5,
-            0.5
-        );
+        previousRawMotorEncoderHeadingDegrees = getRawMotorEncoderHeadingDegrees();
+        unwrappedEncoderRotationsFromForward =
+            TurretHeadingMath.initializeEncoderRotationsFromKnownHeading(
+                previousRawEncoderRotations,
+                TurretConstants.kForwardEncoderOffsetDegrees,
+                TurretConstants.kStartupTurretHeadingDegrees,
+                getHeadingDegreesPerEncoderRotation()
+            );
         usingMotorEncoderFallback = false;
+        encoderMotorGuidanceErrorDegrees = 0.0;
+        usedMotorEncoderGuidance = false;
         syncMotorEncoderFallbackOffset();
         holdCurrentHeading();
     }
@@ -329,14 +364,34 @@ public class TurretHeading {
 
     private void updateUnwrappedEncoderPosition() {
         double rawEncoderRotations = getRawEncoderRotations();
-        double deltaRotations = MathUtil.inputModulus(
+        double rawMotorEncoderHeadingDegrees = getRawMotorEncoderHeadingDegrees();
+        double continuityDeltaRotations = MathUtil.inputModulus(
             rawEncoderRotations - previousRawEncoderRotations,
             -0.5,
             0.5
         );
+        double continuityEncoderRotationsFromForward =
+            unwrappedEncoderRotationsFromForward + continuityDeltaRotations;
+        double motorEncoderDeltaDegrees = rawMotorEncoderHeadingDegrees
+            - previousRawMotorEncoderHeadingDegrees;
+        double motorPredictedHeadingDegrees = getThroughBoreHeadingDegrees()
+            + motorEncoderDeltaDegrees;
+        TurretHeadingMath.EncoderUnwrapResult unwrapResult =
+            TurretHeadingMath.chooseEncoderUnwrap(
+                rawEncoderRotations - getForwardEncoderOffsetRotations(),
+                continuityEncoderRotationsFromForward,
+                motorPredictedHeadingDegrees,
+                getHeadingDegreesPerEncoderRotation()
+            );
 
-        unwrappedEncoderRotationsFromForward += deltaRotations;
+        unwrappedEncoderRotationsFromForward = unwrapResult.encoderRotationsFromForward();
+        encoderMotorGuidanceErrorDegrees = unwrapResult.motorGuidanceErrorDegrees();
+        usedMotorEncoderGuidance = unwrapResult.usedMotorGuidance();
+        if (usedMotorEncoderGuidance) {
+            motorEncoderGuidanceCorrectionCount++;
+        }
         previousRawEncoderRotations = rawEncoderRotations;
+        previousRawMotorEncoderHeadingDegrees = rawMotorEncoderHeadingDegrees;
     }
 
     private void shiftEncoderRotationTowardHeadingDirection(double headingDirection) {
@@ -345,6 +400,7 @@ public class TurretHeading {
         }
 
         previousRawEncoderRotations = getRawEncoderRotations();
+        previousRawMotorEncoderHeadingDegrees = getRawMotorEncoderHeadingDegrees();
         unwrappedEncoderRotationsFromForward =
             TurretHeadingMath.shiftEncoderRotationTowardHeadingDirection(
                 unwrappedEncoderRotationsFromForward,
@@ -353,14 +409,26 @@ public class TurretHeading {
             );
         usingMotorEncoderFallback = false;
         lastEncoderConnected = true;
+        encoderMotorGuidanceErrorDegrees = 0.0;
+        usedMotorEncoderGuidance = false;
         syncMotorEncoderFallbackOffset();
     }
 
     private void alignThroughBoreUnwrapToMotorFallback() {
-        unwrappedEncoderRotationsFromForward = getMotorEncoderHeadingDegrees()
-            / (TurretConstants.kTurretHeadingSign * 360.0)
-            * (TurretConstants.kTurretGearTeeth / TurretConstants.kEncoderGearTeeth);
         previousRawEncoderRotations = getRawEncoderRotations();
+        double motorFallbackHeadingDegrees = getMotorEncoderHeadingDegrees();
+        unwrappedEncoderRotationsFromForward =
+            TurretHeadingMath.chooseNearestEquivalentEncoderRotationsFromForward(
+                previousRawEncoderRotations - getForwardEncoderOffsetRotations(),
+                motorFallbackHeadingDegrees,
+                getHeadingDegreesPerEncoderRotation()
+            );
+        previousRawMotorEncoderHeadingDegrees = getRawMotorEncoderHeadingDegrees();
+        encoderMotorGuidanceErrorDegrees = Math.abs(
+            getThroughBoreHeadingDegrees() - motorFallbackHeadingDegrees
+        );
+        usedMotorEncoderGuidance = true;
+        motorEncoderGuidanceCorrectionCount++;
     }
 
     private void syncMotorEncoderFallbackOffset() {

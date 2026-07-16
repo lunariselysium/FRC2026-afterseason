@@ -9,6 +9,12 @@ final class TurretHeadingMath {
 
     private TurretHeadingMath() {}
 
+    record EncoderUnwrapResult(
+        double encoderRotationsFromForward,
+        double motorGuidanceErrorDegrees,
+        boolean usedMotorGuidance
+    ) {}
+
     static double chooseNearestEquivalentInWindow(
         double requestedHeadingDegrees,
         double referenceHeadingDegrees,
@@ -78,6 +84,23 @@ final class TurretHeadingMath {
         return Math.abs(targetHeadingDegrees - measuredHeadingDegrees) <= toleranceDegrees;
     }
 
+    static double encoderRotationsToDegrees(double encoderRotations) {
+        return encoderRotations * 360.0;
+    }
+
+    static double initializeEncoderRotationsFromKnownHeading(
+        double rawEncoderRotations,
+        double forwardEncoderOffsetDegrees,
+        double knownStartupHeadingDegrees,
+        double headingDegreesPerEncoderRotation
+    ) {
+        return chooseNearestEquivalentEncoderRotationsFromForward(
+            rawEncoderRotations - forwardEncoderOffsetDegrees / 360.0,
+            knownStartupHeadingDegrees,
+            headingDegreesPerEncoderRotation
+        );
+    }
+
     static double chooseNearestEquivalentEncoderRotationsFromForward(
         double rawEncoderRotationsFromForward,
         double referenceHeadingDegrees,
@@ -105,6 +128,47 @@ final class TurretHeadingMath {
 
         return unwrappedEncoderRotations
             + Math.copySign(1.0, headingDirection * headingDegreesPerEncoderRotation);
+    }
+
+    static EncoderUnwrapResult chooseEncoderUnwrap(
+        double rawEncoderRotationsFromForward,
+        double continuityEncoderRotationsFromForward,
+        double motorPredictedHeadingDegrees,
+        double headingDegreesPerEncoderRotation
+    ) {
+        if (Math.abs(headingDegreesPerEncoderRotation) <= kEpsilon) {
+            return new EncoderUnwrapResult(
+                continuityEncoderRotationsFromForward,
+                0.0,
+                false
+            );
+        }
+
+        double motorGuidedEncoderRotations =
+            chooseNearestEquivalentEncoderRotationsFromForward(
+                rawEncoderRotationsFromForward,
+                motorPredictedHeadingDegrees,
+                headingDegreesPerEncoderRotation
+            );
+        double motorGuidanceErrorDegrees = Math.abs(
+            motorGuidedEncoderRotations * headingDegreesPerEncoderRotation
+                - motorPredictedHeadingDegrees
+        );
+        double maximumUnambiguousGuidanceErrorDegrees =
+            Math.abs(headingDegreesPerEncoderRotation) * 0.25;
+        boolean usedMotorGuidance =
+            motorGuidanceErrorDegrees <= maximumUnambiguousGuidanceErrorDegrees
+                && Math.abs(
+                    motorGuidedEncoderRotations - continuityEncoderRotationsFromForward
+                ) > kEpsilon;
+
+        return new EncoderUnwrapResult(
+            usedMotorGuidance
+                ? motorGuidedEncoderRotations
+                : continuityEncoderRotationsFromForward,
+            motorGuidanceErrorDegrees,
+            usedMotorGuidance
+        );
     }
 
     private static boolean isBetterCandidate(

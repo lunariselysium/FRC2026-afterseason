@@ -138,8 +138,8 @@ public final class Constants {
          * Initial robot-relative bump-crossing values. Direction is selected by
          * the PathPlanner named command.
          */
-        public static final double kCrossingSpeedMetersPerSecond = 2.5;
-        public static final double kCrossingDriveTimeSeconds = 2.0;
+        public static final double kCrossingSpeedMetersPerSecond = 2.0;
+        public static final double kCrossingDriveTimeSeconds = 2.4;
         public static final double kMaximumDriveTimeSeconds = 2.4;
         public static final double kRelocalizationWarningSeconds = 1.2;
     }
@@ -148,7 +148,7 @@ public final class Constants {
         private DriveConstants() {}
 
         public static final double kNormalSupplyCurrentLimitAmps = 40.0;
-        public static final double kShootingSupplyCurrentLimitAmps = 5.0;
+        public static final double kShootingSupplyCurrentLimitAmps = 3.0;
     }
 
     public static final class AutoConstants {
@@ -334,9 +334,12 @@ public final class Constants {
          * Tune this to the raw encoder degrees reported when the turret is pointed
          * straight forward. Because the encoder is on the 14 tooth gear, this offset
          * only disambiguates correctly when the turret starts within about 28 degrees
-         * of forward.
+         * of kStartupTurretHeadingDegrees.
          */
-        public static final double kForwardEncoderOffsetDegrees = 171.7;
+        // Calibrated from the raw 183.1 degree reading at a known -90 degree heading.
+        public static final double kForwardEncoderOffsetDegrees = 324.53;
+        // The turret must be physically here when robot code starts.
+        public static final double kStartupTurretHeadingDegrees = -90.0;
 
         public static final double kMotorToEncoderShaftReduction =
             (kFirstStageDrivenGearTeeth / kHeadingMotorPinionTeeth)

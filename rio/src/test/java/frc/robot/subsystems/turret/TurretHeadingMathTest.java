@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import frc.robot.Constants.TurretConstants;
 import org.junit.jupiter.api.Test;
 
 class TurretHeadingMathTest {
@@ -120,6 +121,71 @@ class TurretHeadingMathTest {
                 headingDegreesPerEncoderRotation
             ),
             kTolerance
+        );
+    }
+
+    @Test
+    void usesMotorGuidanceToResolveAnAbsoluteEncoderWrap() {
+        TurretHeadingMath.EncoderUnwrapResult result =
+            TurretHeadingMath.chooseEncoderUnwrap(
+                0.60,
+                -0.40,
+                -33.6,
+                -56.0
+            );
+
+        assertEquals(0.60, result.encoderRotationsFromForward(), kTolerance);
+        assertEquals(0.0, result.motorGuidanceErrorDegrees(), kTolerance);
+        assertTrue(result.usedMotorGuidance());
+    }
+
+    @Test
+    void trustsAbsoluteContinuityWhenMotorGuidanceIsAmbiguous() {
+        TurretHeadingMath.EncoderUnwrapResult result =
+            TurretHeadingMath.chooseEncoderUnwrap(
+                0.0,
+                0.0,
+                -35.0,
+                -56.0
+            );
+
+        assertEquals(0.0, result.encoderRotationsFromForward(), kTolerance);
+        assertEquals(21.0, result.motorGuidanceErrorDegrees(), kTolerance);
+        assertFalse(result.usedMotorGuidance());
+    }
+
+    @Test
+    void convertsRawEncoderRotationsToDegrees() {
+        assertEquals(
+            171.7,
+            TurretHeadingMath.encoderRotationsToDegrees(171.7 / 360.0),
+            kTolerance
+        );
+    }
+
+    @Test
+    void calibratesForwardOffsetFromClockwiseNinetyDegreeReference() {
+        assertEquals(
+            324.53,
+            TurretConstants.kForwardEncoderOffsetDegrees,
+            kTolerance
+        );
+    }
+
+    @Test
+    void initializesFromClockwiseNinetyDegreeStartupReference() {
+        double encoderRotationsFromForward =
+            TurretHeadingMath.initializeEncoderRotationsFromKnownHeading(
+                183.1 / 360.0,
+                TurretConstants.kForwardEncoderOffsetDegrees,
+                -90.0,
+                -56.0
+            );
+
+        assertEquals(
+            -90.0,
+            encoderRotationsFromForward * -56.0,
+            1.0e-3
         );
     }
 

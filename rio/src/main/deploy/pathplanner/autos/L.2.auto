@@ -64,33 +64,33 @@
                 "data": {
                   "name": "Bump Cross Forward Left"
                 }
+              },
+              {
+                "type": "sequential",
+                "data": {
+                  "commands": [
+                    {
+                      "type": "wait",
+                      "data": {
+                        "waitTime": 1.5
+                      }
+                    },
+                    {
+                      "type": "named",
+                      "data": {
+                        "name": "Auto Score Start"
+                      }
+                    }
+                  ]
+                }
               }
             ]
           }
         },
         {
-          "type": "parallel",
+          "type": "path",
           "data": {
-            "commands": [
-              {
-                "type": "path",
-                "data": {
-                  "pathName": "3.2"
-                }
-              },
-              {
-                "type": "named",
-                "data": {
-                  "name": "Intake Roller Start"
-                }
-              },
-              {
-                "type": "named",
-                "data": {
-                  "name": "Auto Score Start"
-                }
-              }
-            ]
+            "pathName": "3.2"
           }
         },
         {
@@ -101,12 +101,6 @@
                 "type": "path",
                 "data": {
                   "pathName": "4.2"
-                }
-              },
-              {
-                "type": "named",
-                "data": {
-                  "name": "Intake Deploy"
                 }
               },
               {
@@ -123,6 +117,25 @@
                       "type": "named",
                       "data": {
                         "name": "Turret Pitch Default"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "sequential",
+                "data": {
+                  "commands": [
+                    {
+                      "type": "named",
+                      "data": {
+                        "name": "Intake Deploy"
+                      }
+                    },
+                    {
+                      "type": "named",
+                      "data": {
+                        "name": "Intake Roller Start"
                       }
                     }
                   ]

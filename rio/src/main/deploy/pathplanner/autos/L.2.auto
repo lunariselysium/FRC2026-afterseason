@@ -15,22 +15,15 @@
                 }
               },
               {
-                "type": "sequential",
+                "type": "named",
                 "data": {
-                  "commands": [
-                    {
-                      "type": "named",
-                      "data": {
-                        "name": "Home Intake And Shooter Pitch"
-                      }
-                    },
-                    {
-                      "type": "named",
-                      "data": {
-                        "name": "Intake Deploy"
-                      }
-                    }
-                  ]
+                  "name": "Home Intake And Shooter Pitch"
+                }
+              },
+              {
+                "type": "named",
+                "data": {
+                  "name": "Intake Roller Start"
                 }
               }
             ]
@@ -41,15 +34,15 @@
           "data": {
             "commands": [
               {
-                "type": "named",
-                "data": {
-                  "name": "Intake Roller Start"
-                }
-              },
-              {
                 "type": "path",
                 "data": {
                   "pathName": "2.2"
+                }
+              },
+              {
+                "type": "named",
+                "data": {
+                  "name": "Home Shooter Pitch Again"
                 }
               }
             ]

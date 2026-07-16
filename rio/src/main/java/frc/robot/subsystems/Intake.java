@@ -31,6 +31,14 @@ import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 import frc.robot.Constants.IntakeConstants;
 
 public class Intake extends SubsystemBase {
+    private static final IntakeHomingPlan kDeployedHomingPlan = IntakeHomingPlan.toDeployedPosition(
+        IntakeConstants.kDeployedSetpointMotorRotations,
+        IntakeConstants.kDeployedHardstopCaptureWindowMotorRotations
+    );
+    private static final IntakeHomingPlan kStowedHomingPlan = IntakeHomingPlan.toStowedPosition(
+        IntakeConstants.kDeployedSetpointMotorRotations
+    );
+
     private final CANBus intakeCanBus = new CANBus(IntakeConstants.kMotorCanBus);
 
     private final TalonFX deployMotor = new TalonFX(
@@ -47,7 +55,7 @@ public class Intake extends SubsystemBase {
     private final MotionMagicVoltage positionRequest = new MotionMagicVoltage(0.0);
 
     private boolean autoScoreRetractionMotionProfileActive;
-    private final PendingIntakeDeploy pendingDeploy = new PendingIntakeDeploy();
+    private IntakeHomingPlan activeHomingPlan = kDeployedHomingPlan;
     private double targetPositionMotorRotations;
     private double appliedDeployMotorOutput;
     private double appliedDeployMechanismVoltage;
@@ -175,10 +183,8 @@ public class Intake extends SubsystemBase {
     }
 
     public void moveToStowedSetpoint() {
-        pendingDeploy.clear();
         if (!isPositionControlAllowed()) {
-            targetPositionMotorRotations = getIntakePositionMotorRotations();
-            positionControlActive = false;
+            startHoming(kStowedHomingPlan);
             return;
         }
 
@@ -193,11 +199,10 @@ public class Intake extends SubsystemBase {
 
     public void moveToDeployedSetpoint() {
         if (!isPositionControlAllowed()) {
-            pendingDeploy.request();
+            startHoming(kDeployedHomingPlan);
             return;
         }
 
-        pendingDeploy.clear();
         homing = false;
         sysIdActive = false;
         useNormalDeployMotionProfile();
@@ -216,7 +221,6 @@ public class Intake extends SubsystemBase {
     }
 
     private void moveToAutoScoreSetpoint(double targetMotorRotations) {
-        pendingDeploy.clear();
         if (!isPositionControlAllowed()) {
             targetPositionMotorRotations = getIntakePositionMotorRotations();
             positionControlActive = false;
@@ -233,14 +237,23 @@ public class Intake extends SubsystemBase {
     }
 
     public void startHoming() {
+        startHoming(kDeployedHomingPlan);
+    }
+
+    private void startHoming(IntakeHomingPlan homingPlan) {
+        activeHomingPlan = homingPlan;
         applyDeployHomingCurrentLimits();
         homing = true;
         homed = false;
         homingTimedOut = false;
         sysIdActive = false;
-        targetDeployed = false;
+        if (activeHomingPlan.usesNormalDeployMotionProfile()) {
+            useNormalDeployMotionProfile();
+        }
+        targetDeployed = activeHomingPlan.targetDeployed();
         positionControlActive = false;
         resetDeployedHardstopCapture();
+        targetPositionMotorRotations = activeHomingPlan.calibratedPositionMotorRotations();
         homingStartTimestampSeconds = Timer.getFPGATimestamp();
         highCurrentStartTimestampSeconds = Double.NaN;
     }
@@ -259,7 +272,6 @@ public class Intake extends SubsystemBase {
 
     public void updateControlAndTelemetry() {
         if (DriverStation.isDisabled()) {
-            pendingDeploy.clear();
             if (homing) {
                 applyDeployOperatingCurrentLimits();
             }
@@ -275,9 +287,6 @@ public class Intake extends SubsystemBase {
             resetDeployedHardstopCapture();
         } else if (homing) {
             updateHomingControl();
-        } else if (pendingDeploy.consumeWhenAllowed(isPositionControlAllowed())) {
-            moveToDeployedSetpoint();
-            updatePositionControl();
         } else if (!isPositionControlAllowed()) {
             targetPositionMotorRotations = getIntakePositionMotorRotations();
             positionControlActive = false;
@@ -327,7 +336,7 @@ public class Intake extends SubsystemBase {
             return;
         }
 
-        setDeployMotorOutput(IntakeConstants.kHomingMotorOutput);
+        setDeployMotionMagicTarget(activeHomingPlan.motionTargetPositionMotorRotations());
 
         if (homingElapsedSeconds < IntakeConstants.kHomingMinRunTimeSeconds) {
             return;
@@ -344,8 +353,12 @@ public class Intake extends SubsystemBase {
         }
 
         if (nowSeconds - highCurrentStartTimestampSeconds >= IntakeConstants.kHomingCurrentDebounceSeconds) {
-            deployMotor.setPosition(0.0);
-            targetPositionMotorRotations = 0.0;
+            deployMotor.setPosition(
+                getRawDeployMotorTargetRotations(
+                    activeHomingPlan.calibratedPositionMotorRotations()
+                )
+            );
+            targetPositionMotorRotations = activeHomingPlan.calibratedPositionMotorRotations();
             homing = false;
             homed = true;
             positionControlActive = false;
@@ -355,7 +368,6 @@ public class Intake extends SubsystemBase {
     }
 
     private void failHomingTimeout() {
-        pendingDeploy.clear();
         homing = false;
         homed = false;
         homingTimedOut = true;
@@ -373,7 +385,6 @@ public class Intake extends SubsystemBase {
     }
 
     private void prepareDeploySysId() {
-        pendingDeploy.clear();
         applyDeployOperatingCurrentLimits();
         homing = false;
         positionControlActive = false;

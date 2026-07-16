@@ -138,9 +138,9 @@ public final class Constants {
          * Initial robot-relative bump-crossing values. Direction is selected by
          * the PathPlanner named command.
          */
-        public static final double kCrossingSpeedMetersPerSecond = 2.0;
-        public static final double kCrossingDriveTimeSeconds = 2.4;
-        public static final double kMaximumDriveTimeSeconds = 2.4;
+        public static final double kCrossingSpeedMetersPerSecond = 2.5;
+        public static final double kCrossingDriveTimeSeconds = 2.1;
+        public static final double kMaximumDriveTimeSeconds = 2.1;
         public static final double kRelocalizationWarningSeconds = 1.2;
     }
 
@@ -148,7 +148,7 @@ public final class Constants {
         private DriveConstants() {}
 
         public static final double kNormalSupplyCurrentLimitAmps = 40.0;
-        public static final double kShootingSupplyCurrentLimitAmps = 3.0;
+        public static final double kShootingSupplyCurrentLimitAmps = 2.0;
     }
 
     public static final class AutoConstants {
@@ -363,8 +363,8 @@ public final class Constants {
         public static final double kTargetHeadingStepDegrees = 30.0;
         public static final double kHeadingToleranceDegrees = 0.5;
         public static final double kHeadingReadyToleranceDegrees = 10.0;
-        public static final double kMaxTurretHeadingVelocityDegreesPerSecond = 600.0;
-        public static final double kMaxTurretHeadingAccelerationDegreesPerSecondSquared = 1500.0;
+        public static final double kMaxTurretHeadingVelocityDegreesPerSecond = 500.0;
+        public static final double kMaxTurretHeadingAccelerationDegreesPerSecondSquared = 800.0;
         public static final double kTurretHeadingKp = 0.0044;
         public static final double kTurretHeadingKv = 0.0010;
         public static final double kTurretHeadingKs = 0.015;
@@ -548,9 +548,8 @@ public final class Constants {
         public static final double kDeployHomingSupplyCurrentLimitAmps = 30.0;
         public static final double kDeployHomingStatorCurrentLimitAmps = 30.0;
 
-        public static final double kHomingMotorOutput = 0.06;
         public static final double kHomingCurrentThresholdAmps = 25.0;
-        public static final double kHomingMinRunTimeSeconds = 0.15;
+        public static final double kHomingMinRunTimeSeconds = 0.10;
         public static final double kHomingCurrentDebounceSeconds = 0.10;
         public static final double kHomingTimeoutSeconds = 10.0;
 

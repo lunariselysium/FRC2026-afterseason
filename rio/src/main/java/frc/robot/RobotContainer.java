@@ -25,7 +25,9 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
 import frc.robot.Constants.BumpCrossingConstants;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.Constants.TurretPitchConstants;
+import frc.robot.autonomous.AutonomousIntakeRollerPolicy;
 import frc.robot.autonomous.BumpCrossingDirection;
+import frc.robot.autonomous.PathPlannerIntakeRollerCommands;
 import frc.robot.autonomous.PathPlannerMechanismRequests;
 import frc.robot.commands.BlindBumpCrossingCommand;
 import frc.robot.commands.ScoreCommand;
@@ -107,6 +109,7 @@ public class RobotContainer {
         vision.updateControlAndTelemetry();
         scoringTelemetry.update();
         updateAutoScoreIntakeAssist();
+        updateAutonomousIntakeRollers();
         intake.updateControlAndTelemetry();
         feeder.updateControlAndTelemetry();
     }
@@ -122,12 +125,11 @@ public class RobotContainer {
         );
         NamedCommands.registerCommand(
             "Intake Roller Start",
-            Commands.runOnce(
+            PathPlannerIntakeRollerCommands.startCommand(
                 () -> {
                     pathPlannerMechanismRequests.startIntakeRollers();
                     intake.runRollersIn();
-                },
-                intake
+                }
             )
         );
         NamedCommands.registerCommand(
@@ -159,6 +161,12 @@ public class RobotContainer {
             "Home Intake And Shooter Pitch",
             Commands.parallel(
                 Commands.runOnce(intake::startHoming, intake),
+                Commands.runOnce(turret::startPitchHoming, turret)
+            )
+        );
+        NamedCommands.registerCommand(
+            "Home Shooter Pitch Again",
+            Commands.parallel(
                 Commands.runOnce(turret::startPitchHoming, turret)
             )
         );
@@ -432,6 +440,12 @@ public class RobotContainer {
             if (!isIntakeButtonRequested()) {
                 intake.stopRollers();
             }
+        }
+    }
+
+    private void updateAutonomousIntakeRollers() {
+        if (AutonomousIntakeRollerPolicy.shouldRunRollers(DriverStation.isAutonomousEnabled())) {
+            intake.runRollersIn();
         }
     }
 

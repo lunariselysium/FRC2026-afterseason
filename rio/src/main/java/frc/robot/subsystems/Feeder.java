@@ -14,6 +14,7 @@ import com.ctre.phoenix6.signals.NeutralModeValue;
 
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.FeederConstants;
@@ -37,6 +38,11 @@ public class Feeder extends SubsystemBase {
         FeederConstants.kBeltFollowerMotorCanId,
         feederCanBus
     );
+    private final FeederJamRecoveryController jamRecoveryController =
+        new FeederJamRecoveryController(
+            FeederConstants.kJamQualificationSeconds,
+            FeederConstants.kJamReverseSeconds
+        );
 
     private double targetFloorOutput;
     private double targetBeltOutput;
@@ -44,6 +50,18 @@ public class Feeder extends SubsystemBase {
     private double appliedFloorOutput;
     private double appliedBeltOutput;
     private double appliedHandoffWheelOutput;
+    private double floorStatorCurrentAmps;
+    private double handoffWheelStatorCurrentAmps;
+    private double beltLeaderStatorCurrentAmps;
+    private double beltFollowerStatorCurrentAmps;
+    private double floorVelocityRotationsPerSecond;
+    private double handoffWheelVelocityRotationsPerSecond;
+    private double beltLeaderVelocityRotationsPerSecond;
+    private double beltFollowerVelocityRotationsPerSecond;
+    private boolean floorJammed;
+    private boolean handoffWheelJammed;
+    private boolean beltLeaderJammed;
+    private boolean beltFollowerJammed;
 
     public Feeder() {
         floorMotor.setNeutralMode(NeutralModeValue.Coast);
@@ -173,19 +191,78 @@ public class Feeder extends SubsystemBase {
             || targetHandoffWheelOutput != 0.0;
     }
 
-    public void updateControlAndTelemetry() {
+    public boolean isJamRecoveryActive() {
+        return jamRecoveryController.isRecoveryActive();
+    }
+
+    public void updateControlAndTelemetry(boolean publishTelemetry) {
         if (DriverStation.isDisabled()) {
             stopAll();
         }
 
-        setFloorMotorOutput(targetFloorOutput);
-        setBeltMotorOutput(targetBeltOutput);
-        setHandoffWheelMotorOutput(targetHandoffWheelOutput);
+        updateMeasurementsAndJamStatus();
+        FeederJamRecoveryController.OutputMode outputMode = jamRecoveryController.update(
+            Timer.getFPGATimestamp(),
+            isForwardFeedRequested(),
+            floorJammed,
+            handoffWheelJammed,
+            beltLeaderJammed,
+            beltFollowerJammed
+        );
+        TargetOutputs appliedOutputs = outputMode == FeederJamRecoveryController.OutputMode.REVERSE
+            ? calculateReversedOutputs()
+            : new TargetOutputs(
+                targetFloorOutput,
+                targetBeltOutput,
+                targetHandoffWheelOutput
+            );
+
+        setFloorMotorOutput(appliedOutputs.floorOutput());
+        setBeltMotorOutput(appliedOutputs.beltOutput());
+        setHandoffWheelMotorOutput(appliedOutputs.handoffWheelOutput());
+
+        if (!publishTelemetry) {
+            return;
+        }
 
         SmartDashboard.putNumber("Feeder/FloorMotorOutput", getAppliedFloorOutput());
         SmartDashboard.putNumber("Feeder/BeltMotorOutput", getAppliedBeltOutput());
         SmartDashboard.putNumber("Feeder/HandoffWheelMotorOutput", getAppliedHandoffWheelOutput());
         SmartDashboard.putBoolean("Feeder/Running", isRunning());
+        SmartDashboard.putNumber("Feeder/FloorStatorCurrentAmps", floorStatorCurrentAmps);
+        SmartDashboard.putNumber(
+            "Feeder/HandoffWheelStatorCurrentAmps",
+            handoffWheelStatorCurrentAmps
+        );
+        SmartDashboard.putNumber(
+            "Feeder/BeltLeaderStatorCurrentAmps",
+            beltLeaderStatorCurrentAmps
+        );
+        SmartDashboard.putNumber(
+            "Feeder/BeltFollowerStatorCurrentAmps",
+            beltFollowerStatorCurrentAmps
+        );
+        SmartDashboard.putNumber(
+            "Feeder/FloorVelocityRotationsPerSecond",
+            floorVelocityRotationsPerSecond
+        );
+        SmartDashboard.putNumber(
+            "Feeder/HandoffWheelVelocityRotationsPerSecond",
+            handoffWheelVelocityRotationsPerSecond
+        );
+        SmartDashboard.putNumber(
+            "Feeder/BeltLeaderVelocityRotationsPerSecond",
+            beltLeaderVelocityRotationsPerSecond
+        );
+        SmartDashboard.putNumber(
+            "Feeder/BeltFollowerVelocityRotationsPerSecond",
+            beltFollowerVelocityRotationsPerSecond
+        );
+        SmartDashboard.putBoolean("Feeder/FloorJammed", floorJammed);
+        SmartDashboard.putBoolean("Feeder/HandoffWheelJammed", handoffWheelJammed);
+        SmartDashboard.putBoolean("Feeder/BeltLeaderJammed", beltLeaderJammed);
+        SmartDashboard.putBoolean("Feeder/BeltFollowerJammed", beltFollowerJammed);
+        SmartDashboard.putBoolean("Feeder/JamRecoveryActive", isJamRecoveryActive());
     }
 
     private MotorAlignmentValue getBeltFollowerMotorAlignment() {
@@ -215,11 +292,69 @@ public class Feeder extends SubsystemBase {
         );
     }
 
+    static boolean isMotorJammed(
+        double requestedOutput,
+        double statorCurrentAmps,
+        double velocityRotationsPerSecond
+    ) {
+        if (requestedOutput < FeederConstants.kJamMinimumCommandedOutput) {
+            return false;
+        }
+
+        return Math.abs(statorCurrentAmps) >= FeederConstants.kJamCurrentThresholdAmps
+            || Math.abs(velocityRotationsPerSecond)
+                <= FeederConstants.kJamVelocityThresholdRotationsPerSecond;
+    }
+
     record TargetOutputs(
         double floorOutput,
         double beltOutput,
         double handoffWheelOutput
     ) {}
+
+    private boolean isForwardFeedRequested() {
+        return targetFloorOutput >= FeederConstants.kJamMinimumCommandedOutput
+            || targetBeltOutput >= FeederConstants.kJamMinimumCommandedOutput
+            || targetHandoffWheelOutput >= FeederConstants.kJamMinimumCommandedOutput;
+    }
+
+    private void updateMeasurementsAndJamStatus() {
+        floorStatorCurrentAmps = floorMotor.getStatorCurrent().getValueAsDouble();
+        handoffWheelStatorCurrentAmps = handoffWheelMotor.getStatorCurrent().getValueAsDouble();
+        beltLeaderStatorCurrentAmps = beltLeaderMotor.getStatorCurrent().getValueAsDouble();
+        beltFollowerStatorCurrentAmps = beltFollowerMotor.getStatorCurrent().getValueAsDouble();
+        floorVelocityRotationsPerSecond = floorMotor.getVelocity().getValueAsDouble();
+        handoffWheelVelocityRotationsPerSecond = handoffWheelMotor
+            .getVelocity()
+            .getValueAsDouble();
+        beltLeaderVelocityRotationsPerSecond = beltLeaderMotor
+            .getVelocity()
+            .getValueAsDouble();
+        beltFollowerVelocityRotationsPerSecond = beltFollowerMotor
+            .getVelocity()
+            .getValueAsDouble();
+
+        floorJammed = isMotorJammed(
+            targetFloorOutput,
+            floorStatorCurrentAmps,
+            floorVelocityRotationsPerSecond
+        );
+        handoffWheelJammed = isMotorJammed(
+            targetHandoffWheelOutput,
+            handoffWheelStatorCurrentAmps,
+            handoffWheelVelocityRotationsPerSecond
+        );
+        beltLeaderJammed = isMotorJammed(
+            targetBeltOutput,
+            beltLeaderStatorCurrentAmps,
+            beltLeaderVelocityRotationsPerSecond
+        );
+        beltFollowerJammed = isMotorJammed(
+            targetBeltOutput,
+            beltFollowerStatorCurrentAmps,
+            beltFollowerVelocityRotationsPerSecond
+        );
+    }
 
     private void setFloorMotorOutput(double floorOutput) {
         appliedFloorOutput = FeederConstants.kFloorMotorOutputSign * floorOutput;

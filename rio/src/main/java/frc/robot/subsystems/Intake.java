@@ -20,6 +20,7 @@ import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.signals.StaticFeedforwardSignValue;
 
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.units.measure.Voltage;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Timer;
@@ -55,8 +56,11 @@ public class Intake extends SubsystemBase {
     private final MotionMagicVoltage positionRequest = new MotionMagicVoltage(0.0);
 
     private boolean autoScoreRetractionMotionProfileActive;
+    private boolean jamRecoveryPositionOverrideActive;
+    private boolean jamRecoveryResumeAutoScoreRetractionMotionProfile;
     private IntakeHomingPlan activeHomingPlan = kDeployedHomingPlan;
     private double targetPositionMotorRotations;
+    private double jamRecoveryTargetPositionMotorRotations;
     private double appliedDeployMotorOutput;
     private double appliedDeployMechanismVoltage;
     private double appliedClosedLoopFeedForwardVolts;
@@ -174,6 +178,41 @@ public class Intake extends SubsystemBase {
         return sysIdActive;
     }
 
+    public boolean isJamRecoveryPositionOverrideActive() {
+        return jamRecoveryPositionOverrideActive;
+    }
+
+    public void beginJamRecoveryOutwardMove() {
+        if (jamRecoveryPositionOverrideActive
+            || !isPositionControlAllowed()
+            || isHoming()
+            || isSysIdActive()) {
+            return;
+        }
+
+        jamRecoveryResumeAutoScoreRetractionMotionProfile =
+            autoScoreRetractionMotionProfileActive;
+        jamRecoveryTargetPositionMotorRotations =
+            calculateJamRecoveryTargetPositionMotorRotations(
+                getIntakePositionMotorRotations()
+            );
+        jamRecoveryPositionOverrideActive = true;
+        useNormalDeployMotionProfile();
+    }
+
+    public void endJamRecoveryOutwardMove() {
+        if (!jamRecoveryPositionOverrideActive) {
+            return;
+        }
+
+        jamRecoveryPositionOverrideActive = false;
+        if (jamRecoveryResumeAutoScoreRetractionMotionProfile) {
+            useAutoScoreRetractionMotionProfile();
+        } else {
+            useNormalDeployMotionProfile();
+        }
+    }
+
     public Command sysIdQuasistatic(Direction direction) {
         return runOnce(this::prepareDeploySysId).andThen(deploySysIdRoutine.quasistatic(direction));
     }
@@ -190,7 +229,7 @@ public class Intake extends SubsystemBase {
 
         homing = false;
         sysIdActive = false;
-        useNormalDeployMotionProfile();
+        requestNormalDeployMotionProfile();
         targetDeployed = false;
         resetDeployedHardstopCapture();
         targetPositionMotorRotations = 0.0;
@@ -205,7 +244,7 @@ public class Intake extends SubsystemBase {
 
         homing = false;
         sysIdActive = false;
-        useNormalDeployMotionProfile();
+        requestNormalDeployMotionProfile();
         targetDeployed = true;
         resetDeployedHardstopCapture();
         targetPositionMotorRotations = IntakeConstants.kDeployedSetpointMotorRotations;
@@ -229,7 +268,7 @@ public class Intake extends SubsystemBase {
 
         homing = false;
         sysIdActive = false;
-        useAutoScoreRetractionMotionProfile();
+        requestAutoScoreRetractionMotionProfile();
         targetDeployed = false;
         resetDeployedHardstopCapture();
         targetPositionMotorRotations = targetMotorRotations;
@@ -241,6 +280,7 @@ public class Intake extends SubsystemBase {
     }
 
     private void startHoming(IntakeHomingPlan homingPlan) {
+        endJamRecoveryOutwardMove();
         activeHomingPlan = homingPlan;
         applyDeployHomingCurrentLimits();
         homing = true;
@@ -270,7 +310,7 @@ public class Intake extends SubsystemBase {
         setRollerOutput(0.0);
     }
 
-    public void updateControlAndTelemetry() {
+    public void updateControlAndTelemetry(boolean publishTelemetry) {
         if (DriverStation.isDisabled()) {
             if (homing) {
                 applyDeployOperatingCurrentLimits();
@@ -282,21 +322,30 @@ public class Intake extends SubsystemBase {
             setDeployMotorOutput(0.0);
             stopRollers();
         } else if (isSysIdActive()) {
+            jamRecoveryPositionOverrideActive = false;
             positionControlActive = false;
             homing = false;
             resetDeployedHardstopCapture();
         } else if (homing) {
+            jamRecoveryPositionOverrideActive = false;
             updateHomingControl();
         } else if (!isPositionControlAllowed()) {
+            jamRecoveryPositionOverrideActive = false;
             targetPositionMotorRotations = getIntakePositionMotorRotations();
             positionControlActive = false;
             resetDeployedHardstopCapture();
             setDeployMotorOutput(0.0);
+        } else if (jamRecoveryPositionOverrideActive) {
+            setDeployMotionMagicTarget(jamRecoveryTargetPositionMotorRotations);
         } else if (!isPositionControlActive()) {
             deployedHardstopCurrentHigh = false;
             setDeployMotorOutput(0.0);
         } else {
             updatePositionControl();
+        }
+
+        if (!publishTelemetry) {
+            return;
         }
 
         SmartDashboard.putNumber("Intake/PositionMotorRotations", getIntakePositionMotorRotations());
@@ -325,6 +374,14 @@ public class Intake extends SubsystemBase {
         );
         SmartDashboard.putBoolean("Intake/DeployedHardstopCurrentHigh", deployedHardstopCurrentHigh);
         SmartDashboard.putBoolean("Intake/DeployedHardstopCaptured", deployedHardstopCaptured);
+        SmartDashboard.putBoolean(
+            "Intake/JamRecoveryPositionOverrideActive",
+            isJamRecoveryPositionOverrideActive()
+        );
+        SmartDashboard.putNumber(
+            "Intake/JamRecoveryTargetMotorRotations",
+            jamRecoveryTargetPositionMotorRotations
+        );
     }
 
     private void updateHomingControl() {
@@ -385,6 +442,7 @@ public class Intake extends SubsystemBase {
     }
 
     private void prepareDeploySysId() {
+        endJamRecoveryOutwardMove();
         applyDeployOperatingCurrentLimits();
         homing = false;
         positionControlActive = false;
@@ -567,6 +625,18 @@ public class Intake extends SubsystemBase {
         );
     }
 
+    static double calculateJamRecoveryTargetPositionMotorRotations(
+        double currentPositionMotorRotations
+    ) {
+        return MathUtil.clamp(
+            currentPositionMotorRotations
+                + IntakeConstants.kDeployedSetpointMotorRotations
+                    * IntakeConstants.kJamRecoveryOutwardTravelFraction,
+            0.0,
+            IntakeConstants.kDeployedSetpointMotorRotations
+        );
+    }
+
     private void useNormalDeployMotionProfile() {
         if (!autoScoreRetractionMotionProfileActive) {
             return;
@@ -579,6 +649,15 @@ public class Intake extends SubsystemBase {
         autoScoreRetractionMotionProfileActive = false;
     }
 
+    private void requestNormalDeployMotionProfile() {
+        if (jamRecoveryPositionOverrideActive) {
+            jamRecoveryResumeAutoScoreRetractionMotionProfile = false;
+            return;
+        }
+
+        useNormalDeployMotionProfile();
+    }
+
     private void useAutoScoreRetractionMotionProfile() {
         if (autoScoreRetractionMotionProfileActive) {
             return;
@@ -589,6 +668,15 @@ public class Intake extends SubsystemBase {
             IntakeConstants.kAutoScoreRetractionAccelerationMotorRotationsPerSecondSquared
         );
         autoScoreRetractionMotionProfileActive = true;
+    }
+
+    private void requestAutoScoreRetractionMotionProfile() {
+        if (jamRecoveryPositionOverrideActive) {
+            jamRecoveryResumeAutoScoreRetractionMotionProfile = true;
+            return;
+        }
+
+        useAutoScoreRetractionMotionProfile();
     }
 
     private void applyDeployMotionMagicConfig(

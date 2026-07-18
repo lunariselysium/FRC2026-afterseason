@@ -33,22 +33,39 @@ public class ShotTuningControls {
         publishDashboardDefaults();
     }
 
-    public void update(boolean normalScoringRequested, boolean flywheelButtonRequested) {
+    public void update(
+        boolean normalScoringRequested,
+        boolean flywheelButtonRequested,
+        boolean publishTelemetry
+    ) {
         boolean manualPitchEnabled = SmartDashboard.getBoolean(kManualPitchEnabledKey, false);
         boolean manualFlywheelEnabled = SmartDashboard.getBoolean(kManualFlywheelEnabledKey, false);
         double requestedPitchDegrees = getRequestedPitchDegrees();
         double requestedFlywheelRotationsPerSecond = getRequestedFlywheelRotationsPerSecond();
         boolean manualBlocked = normalScoringRequested || turret.isAnySysIdActive();
 
-        SmartDashboard.putBoolean(kManualBlockedKey, manualBlocked);
-        SmartDashboard.putBoolean(kManualPitchActiveKey, !manualBlocked && manualPitchEnabled);
-        SmartDashboard.putBoolean(kManualFlywheelActiveKey, !manualBlocked && manualFlywheelEnabled);
+        if (publishTelemetry) {
+            SmartDashboard.putBoolean(kManualBlockedKey, manualBlocked);
+            SmartDashboard.putBoolean(kManualPitchActiveKey, !manualBlocked && manualPitchEnabled);
+            SmartDashboard.putBoolean(kManualFlywheelActiveKey, !manualBlocked && manualFlywheelEnabled);
+            SmartDashboard.putNumber(kAppliedPitchDegreesKey, requestedPitchDegrees);
+            SmartDashboard.putNumber(
+                kAppliedFlywheelRpsKey,
+                requestedFlywheelRotationsPerSecond
+            );
+            SmartDashboard.putNumber(
+                kAppliedFlywheelRpmKey,
+                60.0 * requestedFlywheelRotationsPerSecond
+            );
+        }
 
         if (manualBlocked) {
-            SmartDashboard.putString(
-                kManualStatusKey,
-                normalScoringRequested ? "BLOCKED_BY_SCORE" : "BLOCKED_BY_SYSID"
-            );
+            if (publishTelemetry) {
+                SmartDashboard.putString(
+                    kManualStatusKey,
+                    normalScoringRequested ? "BLOCKED_BY_SCORE" : "BLOCKED_BY_SYSID"
+                );
+            }
             return;
         }
 
@@ -63,7 +80,12 @@ public class ShotTuningControls {
         }
 
         manualFlywheelWasActive = manualFlywheelEnabled;
-        SmartDashboard.putString(kManualStatusKey, getManualStatus(manualPitchEnabled, manualFlywheelEnabled));
+        if (publishTelemetry) {
+            SmartDashboard.putString(
+                kManualStatusKey,
+                getManualStatus(manualPitchEnabled, manualFlywheelEnabled)
+            );
+        }
     }
 
     public double getRequestedFlywheelRotationsPerSecond() {
@@ -77,8 +99,6 @@ public class ShotTuningControls {
             ScoringConstants.kMaxShotFlywheelRotationsPerSecond
         );
 
-        SmartDashboard.putNumber(kAppliedFlywheelRpsKey, appliedFlywheelRotationsPerSecond);
-        SmartDashboard.putNumber(kAppliedFlywheelRpmKey, 60.0 * appliedFlywheelRotationsPerSecond);
         return appliedFlywheelRotationsPerSecond;
     }
 
@@ -107,7 +127,6 @@ public class ShotTuningControls {
             ScoringConstants.kMaxShotPitchDegrees
         );
 
-        SmartDashboard.putNumber(kAppliedPitchDegreesKey, appliedPitchDegrees);
         return appliedPitchDegrees;
     }
 

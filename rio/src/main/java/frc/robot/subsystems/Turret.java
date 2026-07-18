@@ -157,6 +157,13 @@ public class Turret extends SubsystemBase {
         flywheel.run(velocityRotationsPerSecond);
     }
 
+    public void runFlywheelAtVelocityRotationsPerSecond(
+        double velocityRotationsPerSecond,
+        double additionalFeedforwardVolts
+    ) {
+        flywheel.run(velocityRotationsPerSecond, additionalFeedforwardVolts);
+    }
+
     public Command runFlywheelAtVelocityCommand(DoubleSupplier velocityRotationsPerSecondSupplier) {
         return runEnd(
             () -> runFlywheelAtVelocityRotationsPerSecond(
@@ -194,6 +201,10 @@ public class Turret extends SubsystemBase {
 
     public double getFlywheelFeedingLoadFeedforwardVolts() {
         return flywheel.getAppliedFeedingLoadFeedforwardVolts();
+    }
+
+    public double getFlywheelShotFeedforwardVolts() {
+        return flywheel.getAppliedShotFeedforwardVolts();
     }
 
     public void runSerializer() {
@@ -241,11 +252,15 @@ public class Turret extends SubsystemBase {
         return runOnce(this::prepareFlywheelSysId).andThen(flywheelSysIdRoutine.dynamic(direction));
     }
 
-    public void updateControlAndTelemetry() {
+    public void updateControlAndTelemetry(boolean publishTelemetry) {
         heading.updateControl();
         pitch.updateControl();
         flywheel.updateControl(serializer.isRunning());
         serializer.updateControl();
+
+        if (!publishTelemetry) {
+            return;
+        }
 
         SmartDashboard.putString("Turret/HeadingStatus", heading.getStatus());
         SmartDashboard.putNumber("Turret/HeadingDegrees", heading.getHeadingDegrees());
@@ -296,6 +311,10 @@ public class Turret extends SubsystemBase {
         SmartDashboard.putNumber(
             "Turret/FlywheelFeedingLoadFeedforwardVolts",
             flywheel.getAppliedFeedingLoadFeedforwardVolts()
+        );
+        SmartDashboard.putNumber(
+            "Turret/FlywheelShotFeedforwardVolts",
+            flywheel.getAppliedShotFeedforwardVolts()
         );
         SmartDashboard.putNumber("Turret/FlywheelMeasuredVoltage", flywheel.getLeaderMotorVoltage());
         SmartDashboard.putNumber("Turret/FlywheelLeaderStatorCurrentAmps", flywheel.getLeaderStatorCurrentAmps());

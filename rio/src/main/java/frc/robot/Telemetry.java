@@ -20,11 +20,8 @@ import edu.wpi.first.wpilibj.util.Color;
 import edu.wpi.first.wpilibj.util.Color8Bit;
 
 public class Telemetry {
-    private static final double kTelemetryUpdatePeriodSeconds = 0.1;
-
     private final double MaxSpeed;
-    private final TelemetryRateLimiter rateLimiter =
-        new TelemetryRateLimiter(kTelemetryUpdatePeriodSeconds);
+    private final TelemetryRateLimiter rateLimiter = TelemetryRateLimiter.forRobotTelemetry();
 
     /**
      * Construct a telemetry object, with the specified max speed of the robot

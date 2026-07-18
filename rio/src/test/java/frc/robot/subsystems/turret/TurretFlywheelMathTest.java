@@ -4,6 +4,7 @@
 
 package frc.robot.subsystems.turret;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,30 +44,21 @@ class TurretFlywheelMathTest {
     }
 
     @Test
-    void shootingReadinessAllowsAnAdditionalThreeRpsUnderspeedButNoExtraOverspeed() {
-        assertTrue(TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
+    void shootingReadinessKeepsTheExistingMinimumButAllowsUnlimitedOverspeed() {
+        assertTrue(TurretFlywheelMath.isAtOrAboveMinimumReadyVelocity(
             42.0,
             34.0,
-            8.0,
-            5.0
+            8.0
         ));
-        assertFalse(TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
+        assertFalse(TurretFlywheelMath.isAtOrAboveMinimumReadyVelocity(
             42.0,
             33.9,
-            8.0,
-            5.0
+            8.0
         ));
-        assertTrue(TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
+        assertTrue(TurretFlywheelMath.isAtOrAboveMinimumReadyVelocity(
             42.0,
-            47.0,
-            8.0,
-            5.0
-        ));
-        assertFalse(TurretFlywheelMath.isWithinAsymmetricVelocityTolerance(
-            42.0,
-            47.1,
-            8.0,
-            5.0
+            80.0,
+            8.0
         ));
     }
 
@@ -80,5 +72,19 @@ class TurretFlywheelMathTest {
             false,
             TurretFlywheelConstants.kFeedingLoadFeedforwardVolts
         ) > 0.0);
+    }
+
+    @Test
+    void combinesShotAndFeedingLoadFeedforward() {
+        assertEquals(
+            1.0,
+            TurretFlywheelMath.getTotalAdditionalFeedforwardVolts(true, 0.5, 0.5),
+            1.0e-9
+        );
+        assertEquals(
+            0.5,
+            TurretFlywheelMath.getTotalAdditionalFeedforwardVolts(false, 0.5, 0.5),
+            1.0e-9
+        );
     }
 }

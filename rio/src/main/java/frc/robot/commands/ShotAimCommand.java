@@ -10,9 +10,11 @@ import java.util.OptionalDouble;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.ScoringConstants;
+import frc.robot.TelemetryRateLimiter;
 import frc.robot.scoring.ScoringCalculator;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
 import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
@@ -24,6 +26,8 @@ public class ShotAimCommand extends Command {
     private final CommandSwerveDrivetrain drivetrain;
     private final Turret turret;
     private final Vision vision;
+    private final TelemetryRateLimiter telemetryRateLimiter =
+        TelemetryRateLimiter.forRobotTelemetryPhase(2);
 
     public ShotAimCommand(
         CommandSwerveDrivetrain drivetrain,
@@ -44,10 +48,15 @@ public class ShotAimCommand extends Command {
 
     @Override
     public void execute() {
+        boolean publishTelemetry = telemetryRateLimiter.shouldPublish(
+            Timer.getFPGATimestamp()
+        );
         Optional<Alliance> alliance = DriverStation.getAlliance();
         if (alliance.isEmpty()) {
-            SmartDashboard.putString("ShotTuning/AimCommandStatus", "NO_ALLIANCE");
-            SmartDashboard.putBoolean("ShotTuning/AimActive", false);
+            if (publishTelemetry) {
+                SmartDashboard.putString("ShotTuning/AimCommandStatus", "NO_ALLIANCE");
+                SmartDashboard.putBoolean("ShotTuning/AimActive", false);
+            }
             return;
         }
 
@@ -71,13 +80,15 @@ public class ShotAimCommand extends Command {
         );
 
         turret.setTargetHeadingDegrees(target.turretHeadingDegrees());
-        SmartDashboard.putString("ShotTuning/AimCommandStatus", "ACTIVE");
-        SmartDashboard.putBoolean("ShotTuning/AimActive", true);
-        SmartDashboard.putBoolean("ShotTuning/AimReady", turret.isHeadingAtTarget());
-        SmartDashboard.putNumber(
-            "ShotTuning/AimTargetHeadingDegrees",
-            target.turretHeadingDegrees()
-        );
+        if (publishTelemetry) {
+            SmartDashboard.putString("ShotTuning/AimCommandStatus", "ACTIVE");
+            SmartDashboard.putBoolean("ShotTuning/AimActive", true);
+            SmartDashboard.putBoolean("ShotTuning/AimReady", turret.isHeadingAtTarget());
+            SmartDashboard.putNumber(
+                "ShotTuning/AimTargetHeadingDegrees",
+                target.turretHeadingDegrees()
+            );
+        }
     }
 
     @Override

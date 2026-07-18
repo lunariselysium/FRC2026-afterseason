@@ -125,17 +125,21 @@ public class Vision extends SubsystemBase {
         relocalizationStartTimestampSeconds = -1.0;
     }
 
-    public void updateControlAndTelemetry() {
+    public void updateControlAndTelemetry(boolean publishTelemetry) {
         if (!DriverStation.isAutonomousEnabled() && poseFusionMode != PoseFusionMode.NORMAL) {
             resumeNormalPoseFusion();
         }
 
         for (VisionCamera camera : cameras) {
             processCamera(camera);
-            publishCameraTelemetry(camera);
+            if (publishTelemetry) {
+                publishCameraTelemetry(camera);
+            }
         }
-        publishTurretForwardHubVisionTelemetry();
-        publishPoseFusionTelemetry();
+        if (publishTelemetry) {
+            publishTurretForwardHubVisionTelemetry();
+            publishPoseFusionTelemetry();
+        }
     }
 
     private Transform3d getRobotToTurretForwardCamera() {

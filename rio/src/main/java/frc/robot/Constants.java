@@ -151,6 +151,17 @@ public final class Constants {
         public static final double kShootingSupplyCurrentLimitAmps = 2.0;
     }
 
+    public static final class OperatorConstants {
+        private OperatorConstants() {}
+
+        public static final int kPrimaryControllerPort = 0;
+        public static final int kBackupControllerPort = 1;
+        public static final double kShiftRumbleStrength = 0.8;
+        public static final double kShiftWarningPulseSeconds = 0.10;
+        public static final double kShiftWarningGapSeconds = 0.08;
+        public static final double kShiftEndPulseSeconds = 0.35;
+    }
+
     public static final class AutoConstants {
         private AutoConstants() {}
 
@@ -455,6 +466,8 @@ public final class Constants {
         public static final double kFlywheelKa = 0.0028782;
         public static final double kFlywheelKs = 0.10952;
         public static final double kFeedingLoadFeedforwardVolts = 0.5;
+        // Start pass compensation at the already proven feeding-load voltage.
+        public static final double kPassShotFeedforwardVolts = kFeedingLoadFeedforwardVolts;
         public static final double kMotionMagicAccelerationRotationsPerSecondSquared = 70.0;
         public static final double kMotionMagicJerkRotationsPerSecondCubed = 700.0;
         public static final double kSupplyCurrentLimitAmps = 40.0;
@@ -497,6 +510,13 @@ public final class Constants {
         public static final double kSupplyCurrentLimitAmps = 20.0;
         public static final double kStatorCurrentLimitAmps = 30.0;
 
+        public static final double kJamMinimumCommandedOutput = 0.20;
+        public static final double kJamCurrentThresholdAmps =
+            kStatorCurrentLimitAmps * 0.80;
+        public static final double kJamVelocityThresholdRotationsPerSecond = 1.0;
+        public static final double kJamQualificationSeconds = 0.20;
+        public static final double kJamReverseSeconds = 0.20;
+
         public static final boolean kBeltFollowerOpposesLeader = false;
     }
 
@@ -521,6 +541,7 @@ public final class Constants {
         public static final double kAutoScoreOscillationDeployedFraction = 0.80;
         public static final double kAutoScoreOscillationSetpointMotorRotations =
             kDeployedSetpointMotorRotations * kAutoScoreOscillationDeployedFraction;
+        public static final double kJamRecoveryOutwardTravelFraction = 0.20;
         public static final double kAutoScoreRetractionDelaySeconds = 1.0;
         public static final double kAutoScoreOscillationPhaseSeconds = 1.0;
         public static final double kPositionToleranceMotorRotations = 0.5;
@@ -533,8 +554,8 @@ public final class Constants {
         public static final double kStowAssistFeedForwardVolts = 0.5;
         public static final double kMotionMagicCruiseVelocityMotorRotationsPerSecond = 72.0;
         public static final double kMotionMagicAccelerationMotorRotationsPerSecondSquared = 144.0;
-        public static final double kAutoScoreRetractionCruiseVelocityMotorRotationsPerSecond = 8.0;
-        public static final double kAutoScoreRetractionAccelerationMotorRotationsPerSecondSquared = 16.0;
+        public static final double kAutoScoreRetractionCruiseVelocityMotorRotationsPerSecond = 10.4;
+        public static final double kAutoScoreRetractionAccelerationMotorRotationsPerSecondSquared = 20.8;
         public static final double kDeployedHardstopCaptureCurrentThresholdAmps = 15.0;
         public static final double kDeployedHardstopCaptureWindowMotorRotations = 1.2;
 

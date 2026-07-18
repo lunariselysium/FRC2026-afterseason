@@ -16,16 +16,13 @@ final class TurretFlywheelMath {
             <= toleranceRotationsPerSecond;
     }
 
-    static boolean isWithinAsymmetricVelocityTolerance(
+    static boolean isAtOrAboveMinimumReadyVelocity(
         double targetVelocityRotationsPerSecond,
         double measuredVelocityRotationsPerSecond,
-        double underspeedToleranceRotationsPerSecond,
-        double overspeedToleranceRotationsPerSecond
+        double underspeedToleranceRotationsPerSecond
     ) {
         return measuredVelocityRotationsPerSecond
-                >= targetVelocityRotationsPerSecond - underspeedToleranceRotationsPerSecond
-            && measuredVelocityRotationsPerSecond
-                <= targetVelocityRotationsPerSecond + overspeedToleranceRotationsPerSecond;
+            >= targetVelocityRotationsPerSecond - underspeedToleranceRotationsPerSecond;
     }
 
     static double getFeedingLoadFeedforwardVolts(
@@ -33,5 +30,16 @@ final class TurretFlywheelMath {
         double feedingLoadFeedforwardVolts
     ) {
         return feedingLoadActive ? feedingLoadFeedforwardVolts : 0.0;
+    }
+
+    static double getTotalAdditionalFeedforwardVolts(
+        boolean feedingLoadActive,
+        double feedingLoadFeedforwardVolts,
+        double shotFeedforwardVolts
+    ) {
+        return shotFeedforwardVolts + getFeedingLoadFeedforwardVolts(
+            feedingLoadActive,
+            feedingLoadFeedforwardVolts
+        );
     }
 }

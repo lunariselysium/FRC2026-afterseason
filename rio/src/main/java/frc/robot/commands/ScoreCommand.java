@@ -11,9 +11,11 @@ import java.util.function.BooleanSupplier;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.ScoringConstants;
+import frc.robot.TelemetryRateLimiter;
 import frc.robot.scoring.ScoringCalculator;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
 import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
@@ -28,6 +30,8 @@ public class ScoreCommand extends Command {
     private final Feeder feeder;
     private final Vision vision;
     private final BooleanSupplier shotPrepRequestedSupplier;
+    private final TelemetryRateLimiter telemetryRateLimiter =
+        TelemetryRateLimiter.forRobotTelemetryPhase(4);
     private final FeedControlStateMachine feedController = new FeedControlStateMachine(
         ScoringConstants.kReadyDebounceCycles,
         ScoringConstants.kFlywheelReducedFeedCycles,
@@ -64,13 +68,18 @@ public class ScoreCommand extends Command {
 
     @Override
     public void execute() {
+        boolean publishTelemetry = telemetryRateLimiter.shouldPublish(
+            Timer.getFPGATimestamp()
+        );
         Optional<Alliance> alliance = DriverStation.getAlliance();
         if (alliance.isEmpty()) {
             feedController.reset();
             feeding = false;
             stopFeeding();
             turret.stopShotOutputs();
-            publishIdleTelemetry("NO_ALLIANCE");
+            if (publishTelemetry) {
+                publishIdleTelemetry("NO_ALLIANCE");
+            }
             return;
         }
 
@@ -96,7 +105,8 @@ public class ScoreCommand extends Command {
         turret.setTargetHeadingDegrees(target.turretHeadingDegrees());
         turret.setTargetPitchDegrees(target.shotSetpoint().pitchDegrees());
         turret.runFlywheelAtVelocityRotationsPerSecond(
-            target.shotSetpoint().flywheelRotationsPerSecond()
+            target.shotSetpoint().flywheelRotationsPerSecond(),
+            ShotFeedforwardPolicy.getAdditionalFeedforwardVolts(target.mode())
         );
 
         boolean feedInterlocksReady = target.shotSetpoint().feedAllowedByDistance()
@@ -111,7 +121,9 @@ public class ScoreCommand extends Command {
         feeding = feedMode != FeedControlStateMachine.OutputMode.STOPPED;
         applyFeedMode(feedMode);
 
-        publishTargetTelemetry(target, hubVisionCorrectionDegrees, ready, feedMode);
+        if (publishTelemetry) {
+            publishTargetTelemetry(target, hubVisionCorrectionDegrees, ready, feedMode);
+        }
     }
 
     @Override
@@ -208,6 +220,10 @@ public class ScoreCommand extends Command {
         SmartDashboard.putNumber(
             "Scoring/FlywheelFeedingLoadFeedforwardVolts",
             turret.getFlywheelFeedingLoadFeedforwardVolts()
+        );
+        SmartDashboard.putNumber(
+            "Scoring/FlywheelShotFeedforwardVolts",
+            turret.getFlywheelShotFeedforwardVolts()
         );
         SmartDashboard.putBoolean(
             "Scoring/FeedAllowedByDistance",

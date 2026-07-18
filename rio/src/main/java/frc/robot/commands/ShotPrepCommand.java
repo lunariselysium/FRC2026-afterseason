@@ -11,9 +11,11 @@ import java.util.function.BooleanSupplier;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.ScoringConstants;
+import frc.robot.TelemetryRateLimiter;
 import frc.robot.scoring.ScoringCalculator;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
 import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
@@ -26,6 +28,8 @@ public class ShotPrepCommand extends Command {
     private final Turret turret;
     private final Vision vision;
     private final BooleanSupplier scoreRequestedSupplier;
+    private final TelemetryRateLimiter telemetryRateLimiter =
+        TelemetryRateLimiter.forRobotTelemetryPhase(3);
 
     public ShotPrepCommand(
         CommandSwerveDrivetrain drivetrain,
@@ -49,11 +53,16 @@ public class ShotPrepCommand extends Command {
 
     @Override
     public void execute() {
+        boolean publishTelemetry = telemetryRateLimiter.shouldPublish(
+            Timer.getFPGATimestamp()
+        );
         Optional<Alliance> alliance = DriverStation.getAlliance();
         if (alliance.isEmpty()) {
             turret.stopFlywheel();
-            SmartDashboard.putString("ShotPrep/Status", "NO_ALLIANCE");
-            SmartDashboard.putBoolean("ShotPrep/Active", false);
+            if (publishTelemetry) {
+                SmartDashboard.putString("ShotPrep/Status", "NO_ALLIANCE");
+                SmartDashboard.putBoolean("ShotPrep/Active", false);
+            }
             return;
         }
 
@@ -82,14 +91,22 @@ public class ShotPrepCommand extends Command {
             target.shotSetpoint().flywheelRotationsPerSecond()
         );
 
-        SmartDashboard.putString("ShotPrep/Status", "ACTIVE");
-        SmartDashboard.putBoolean("ShotPrep/Active", true);
-        SmartDashboard.putNumber("ShotPrep/TargetHeadingDegrees", target.turretHeadingDegrees());
-        SmartDashboard.putNumber("ShotPrep/TargetPitchDegrees", target.shotSetpoint().pitchDegrees());
-        SmartDashboard.putNumber(
-            "ShotPrep/TargetFlywheelRps",
-            target.shotSetpoint().flywheelRotationsPerSecond()
-        );
+        if (publishTelemetry) {
+            SmartDashboard.putString("ShotPrep/Status", "ACTIVE");
+            SmartDashboard.putBoolean("ShotPrep/Active", true);
+            SmartDashboard.putNumber(
+                "ShotPrep/TargetHeadingDegrees",
+                target.turretHeadingDegrees()
+            );
+            SmartDashboard.putNumber(
+                "ShotPrep/TargetPitchDegrees",
+                target.shotSetpoint().pitchDegrees()
+            );
+            SmartDashboard.putNumber(
+                "ShotPrep/TargetFlywheelRps",
+                target.shotSetpoint().flywheelRotationsPerSecond()
+            );
+        }
     }
 
     @Override

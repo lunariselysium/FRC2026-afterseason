@@ -22,7 +22,7 @@ class PathPlannerAssetTest {
 
     @Test
     void lAutoResetsFromPathOneBeforeFollowingLaterPaths() throws Exception {
-        PathPlannerPath firstPath = PathPlannerAuto.getPathGroupFromAutoFile("L").get(0);
+        PathPlannerPath firstPath = PathPlannerAuto.getPathGroupFromAutoFile("L.2").get(0);
 
         double startingX = firstPath.getStartingHolonomicPose().orElseThrow().getX();
 

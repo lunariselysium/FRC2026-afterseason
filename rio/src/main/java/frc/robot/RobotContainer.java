@@ -14,6 +14,7 @@ import com.pathplanner.lib.commands.PathPlannerAuto;
 
 import edu.wpi.first.units.measure.Voltage;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.GenericHID.RumbleType;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
@@ -23,6 +24,7 @@ import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 
 import frc.robot.Constants.BumpCrossingConstants;
+import frc.robot.Constants.OperatorConstants;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.Constants.TurretPitchConstants;
 import frc.robot.autonomous.AutonomousIntakeRollerPolicy;
@@ -62,15 +64,29 @@ public class RobotContainer {
             .withDriveRequestType(DriveRequestType.OpenLoopVoltage); // Use open-loop control for drive motors
 
     private final Telemetry logger = new Telemetry(maxSpeedMetersPerSecond);
+    // Spread 10 Hz dashboard groups across the five 20 ms robot loops in each cycle.
+    private final TelemetryRateLimiter baseTelemetryLimiter =
+        TelemetryRateLimiter.forRobotTelemetryPhase(0);
+    private final TelemetryRateLimiter turretTelemetryLimiter =
+        TelemetryRateLimiter.forRobotTelemetryPhase(1);
+    private final TelemetryRateLimiter visionTelemetryLimiter =
+        TelemetryRateLimiter.forRobotTelemetryPhase(2);
+    private final TelemetryRateLimiter scoringTelemetryLimiter =
+        TelemetryRateLimiter.forRobotTelemetryPhase(3);
+    private final TelemetryRateLimiter mechanismTelemetryLimiter =
+        TelemetryRateLimiter.forRobotTelemetryPhase(4);
 
-    private final CommandXboxController joystick = new CommandXboxController(0);
+    private final CommandXboxController joystick =
+        new CommandXboxController(OperatorConstants.kPrimaryControllerPort);
+    private final CommandXboxController backupController =
+        new CommandXboxController(OperatorConstants.kBackupControllerPort);
     private final Trigger backButton = joystick.back();
     private final Trigger startButton = joystick.start();
     private final Trigger leftBumper = joystick.leftBumper();
     private final Trigger leftTrigger = joystick.leftTrigger();
     private final Trigger rightTrigger = joystick.rightTrigger();
     private final Trigger rightBumper = joystick.rightBumper();
-    private final Trigger rightStickButton = joystick.rightStick();
+    private final Trigger aButton = joystick.a();
 
     public final CommandSwerveDrivetrain drivetrain = TunerConstants.createDrivetrain();
     public final Turret turret = new Turret();
@@ -84,10 +100,13 @@ public class RobotContainer {
         new PathPlannerMechanismRequests();
     private boolean pathPlannerAutoScoreRunning;
     private boolean autoScoreIntakeControlsRollers;
+    private boolean feederJamRecoveryWasActive;
     private final ScoringTelemetry scoringTelemetry =
         new ScoringTelemetry(drivetrain, turret, vision);
     private final ShotTuningControls shotTuningControls = new ShotTuningControls(turret);
     private final RobotMusic robotMusic = new RobotMusic();
+    private final RebuiltMatchStatePublisher rebuiltMatchStatePublisher =
+        new RebuiltMatchStatePublisher();
     private final SendableChooser<Command> autonomousChooser;
 
     public RobotContainer() {
@@ -98,20 +117,39 @@ public class RobotContainer {
     }
 
     public void robotPeriodic() {
-        robotMusic.update();
-        SmartDashboard.putString(
-            "Auto/ActivePath",
-            PathPlannerAuto.currentPathName != null ? PathPlannerAuto.currentPathName : "NONE"
-        );
+        double nowSeconds = Timer.getFPGATimestamp();
+        boolean publishBaseTelemetry = baseTelemetryLimiter.shouldPublish(nowSeconds);
+        boolean publishTurretTelemetry = turretTelemetryLimiter.shouldPublish(nowSeconds);
+        boolean publishVisionTelemetry = visionTelemetryLimiter.shouldPublish(nowSeconds);
+        boolean publishScoringTelemetry = scoringTelemetryLimiter.shouldPublish(nowSeconds);
+        boolean publishMechanismTelemetry = mechanismTelemetryLimiter.shouldPublish(nowSeconds);
+
+        robotMusic.update(publishBaseTelemetry);
+        if (publishBaseTelemetry) {
+            SmartDashboard.putString(
+                "Auto/ActivePath",
+                PathPlannerAuto.currentPathName != null ? PathPlannerAuto.currentPathName : "NONE"
+            );
+        }
         updatePathPlannerAutoScore();
-        shotTuningControls.update(isShootingControlRequested(), isShotPrepRequested());
-        turret.updateControlAndTelemetry();
-        vision.updateControlAndTelemetry();
-        scoringTelemetry.update();
+        shotTuningControls.update(
+            isShootingControlRequested(),
+            isShotPrepRequested(),
+            publishBaseTelemetry
+        );
+        turret.updateControlAndTelemetry(publishTurretTelemetry);
+        vision.updateControlAndTelemetry(publishVisionTelemetry);
+        if (publishScoringTelemetry) {
+            scoringTelemetry.update();
+        }
         updateAutoScoreIntakeAssist();
         updateAutonomousIntakeRollers();
-        intake.updateControlAndTelemetry();
-        feeder.updateControlAndTelemetry();
+        feeder.updateControlAndTelemetry(publishMechanismTelemetry);
+        updateFeederJamRecoveryIntakeMove();
+        intake.updateControlAndTelemetry(publishMechanismTelemetry);
+        if (publishBaseTelemetry) {
+            rebuiltMatchStatePublisher.update();
+        }
     }
 
     private void configurePathPlannerBindings() {
@@ -249,10 +287,6 @@ public class RobotContainer {
             )
         );
 
-        joystick.a()
-            .and(joystick.back().negate())
-            .and(joystick.start().negate())
-            .onTrue(Commands.runOnce(intake::moveToStowedSetpoint, intake));
         joystick.b()
             .and(joystick.back().negate())
             .and(joystick.start().negate())
@@ -263,10 +297,7 @@ public class RobotContainer {
             .and(rightTrigger.negate())
             .whileTrue(
                 Commands.startEnd(
-                    () -> {
-                        intake.moveToDeployedSetpoint();
-                        intake.runRollersIn();
-                    },
+                    intake::runRollersIn,
                     intake::stopRollers,
                     intake
                 )
@@ -312,24 +343,18 @@ public class RobotContainer {
             .whileTrue(drivetrain.driveForwardAtVoltageCommand(kDriveSpeedTestVoltage));
 
         joystick.povLeft()
-            .and(rightStickButton.negate())
             .and(joystick.back().negate())
             .and(joystick.start().negate())
             .onTrue(Commands.runOnce(this::stepTurretHeadingLeftFromPov));
         joystick.povRight()
-            .and(rightStickButton.negate())
             .and(joystick.back().negate())
             .and(joystick.start().negate())
             .onTrue(Commands.runOnce(this::stepTurretHeadingRightFromPov));
-        rightStickButton
-            .and(joystick.povLeft())
-            .and(joystick.back().negate())
-            .and(joystick.start().negate())
+        backupController.rightStick()
+            .and(backupController.povLeft())
             .onTrue(Commands.runOnce(turret::shiftHeadingEncoderRotationLeft, turret));
-        rightStickButton
-            .and(joystick.povRight())
-            .and(joystick.back().negate())
-            .and(joystick.start().negate())
+        backupController.rightStick()
+            .and(backupController.povRight())
             .onTrue(Commands.runOnce(turret::shiftHeadingEncoderRotationRight, turret));
         joystick.povUp()
             .and(joystick.back().negate())
@@ -349,7 +374,52 @@ public class RobotContainer {
             .and(startButton.negate())
             .and(rightTrigger.negate())
             .whileTrue(scoreCommand);
+        configureShiftRumbleFeedback();
+
+        // SysId routines intentionally have no controller bindings in competition code.
         drivetrain.registerTelemetry(logger::telemeterize);
+    }
+
+    private void configureShiftRumbleFeedback() {
+        new Trigger(() ->
+            DriverStation.isTeleop()
+                && RebuiltMatchState.isFiveSecondsBeforeShiftEnd(DriverStation.getMatchTime())
+        ).onTrue(createShiftWarningRumbleCommand());
+
+        new Trigger(() ->
+            DriverStation.isTeleop()
+                && RebuiltMatchState.isImmediatelyAfterShiftEnd(DriverStation.getMatchTime())
+        ).onTrue(createShiftEndRumbleCommand());
+    }
+
+    private Command createShiftWarningRumbleCommand() {
+        return Commands.sequence(
+            Commands.runOnce(() ->
+                setPrimaryControllerRumble(OperatorConstants.kShiftRumbleStrength)
+            ),
+            Commands.waitSeconds(OperatorConstants.kShiftWarningPulseSeconds),
+            Commands.runOnce(() -> setPrimaryControllerRumble(0.0)),
+            Commands.waitSeconds(OperatorConstants.kShiftWarningGapSeconds),
+            Commands.runOnce(() ->
+                setPrimaryControllerRumble(OperatorConstants.kShiftRumbleStrength)
+            ),
+            Commands.waitSeconds(OperatorConstants.kShiftWarningPulseSeconds),
+            Commands.runOnce(() -> setPrimaryControllerRumble(0.0))
+        ).ignoringDisable(true).finallyDo(interrupted -> setPrimaryControllerRumble(0.0));
+    }
+
+    private Command createShiftEndRumbleCommand() {
+        return Commands.sequence(
+            Commands.runOnce(() ->
+                setPrimaryControllerRumble(OperatorConstants.kShiftRumbleStrength)
+            ),
+            Commands.waitSeconds(OperatorConstants.kShiftEndPulseSeconds),
+            Commands.runOnce(() -> setPrimaryControllerRumble(0.0))
+        ).ignoringDisable(true).finallyDo(interrupted -> setPrimaryControllerRumble(0.0));
+    }
+
+    private void setPrimaryControllerRumble(double strength) {
+        joystick.getHID().setRumble(RumbleType.kBothRumble, strength);
     }
 
     private boolean isAutoScoreRequested() {
@@ -392,24 +462,24 @@ public class RobotContainer {
     }
 
     private void stepTurretHeadingLeftFromPov() {
-        resetTurretHeadingEncoderRotationIfRequested();
         turret.stepTargetHeadingLeft();
     }
 
     private void stepTurretHeadingRightFromPov() {
-        resetTurretHeadingEncoderRotationIfRequested();
         turret.stepTargetHeadingRight();
     }
 
-    private void resetTurretHeadingEncoderRotationIfRequested() {
-        if (rightStickButton.getAsBoolean()) {
-            turret.resetHeadingEncoderRotationToTargetHeading();
-        }
+    private boolean isIntakeButtonRequested() {
+        return DriverStation.isEnabled()
+            && rightBumper.getAsBoolean()
+            && !rightTrigger.getAsBoolean()
+            && !backButton.getAsBoolean()
+            && !startButton.getAsBoolean();
     }
 
-    private boolean isIntakeButtonRequested() {
-        return rightBumper.getAsBoolean()
-            && !rightTrigger.getAsBoolean()
+    private boolean isIntakeRetractRequested() {
+        return DriverStation.isEnabled()
+            && aButton.getAsBoolean()
             && !backButton.getAsBoolean()
             && !startButton.getAsBoolean();
     }
@@ -419,10 +489,12 @@ public class RobotContainer {
             scoreCommand.isActive(),
             scoreCommand.isFeeding(),
             isIntakeButtonRequested(),
+            isIntakeRetractRequested(),
             Timer.getFPGATimestamp()
         );
 
         switch (intakeRequest) {
+            case STOWED -> intake.moveToStowedSetpoint();
             case DEPLOYED -> intake.moveToDeployedSetpoint();
             case AUTO_SCORE_SEMI_DEPLOYED -> intake.moveToAutoScoreRetractionSetpoint();
             case AUTO_SCORE_SEVENTY_PERCENT_DEPLOYED ->
@@ -431,7 +503,9 @@ public class RobotContainer {
             }
         }
 
-        boolean autoScoreControlsRollers = scoreCommand.isActive() && intakeRequest.runsRollers();
+        boolean autoScoreControlsRollers = scoreCommand.isActive()
+            && autoScoreIntakeAssist.hasFeedingStarted()
+            && intakeRequest.runsRollers();
         if (autoScoreControlsRollers) {
             intake.runRollersIn();
             autoScoreIntakeControlsRollers = true;
@@ -447,6 +521,17 @@ public class RobotContainer {
         if (AutonomousIntakeRollerPolicy.shouldRunRollers(DriverStation.isAutonomousEnabled())) {
             intake.runRollersIn();
         }
+    }
+
+    private void updateFeederJamRecoveryIntakeMove() {
+        boolean feederJamRecoveryActive = feeder.isJamRecoveryActive();
+        if (feederJamRecoveryActive && !feederJamRecoveryWasActive) {
+            intake.beginJamRecoveryOutwardMove();
+        } else if (!feederJamRecoveryActive && feederJamRecoveryWasActive) {
+            intake.endJamRecoveryOutwardMove();
+        }
+
+        feederJamRecoveryWasActive = feederJamRecoveryActive;
     }
 
     private void pointTurretAtIntendedTarget() {

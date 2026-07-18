@@ -5,6 +5,8 @@
 package frc.robot.subsystems;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -28,4 +30,18 @@ class FeederTest {
         assertEquals(-FeederConstants.kBeltMotorOutput, outputs.beltOutput());
         assertEquals(-FeederConstants.kHandoffWheelMotorOutput, outputs.handoffWheelOutput());
     }
+
+    @Test
+    void highCurrentOrLowVelocityIndependentlyIndicateAJam() {
+        assertTrue(Feeder.isMotorJammed(0.95, 26.0, 20.0));
+        assertTrue(Feeder.isMotorJammed(0.95, 5.0, 0.5));
+        assertFalse(Feeder.isMotorJammed(0.95, 5.0, 20.0));
+    }
+
+    @Test
+    void stoppedOrReversingMotorIsNotMonitoredForAutomaticJamRecovery() {
+        assertFalse(Feeder.isMotorJammed(0.0, 30.0, 0.0));
+        assertFalse(Feeder.isMotorJammed(-0.95, 30.0, 0.0));
+    }
+
 }

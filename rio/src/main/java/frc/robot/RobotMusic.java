@@ -61,9 +61,11 @@ public class RobotMusic {
         );
     }
 
-    public void update() {
-        SmartDashboard.putBoolean("RobotMusic/Loaded", musicLoaded);
-        SmartDashboard.putBoolean("RobotMusic/Playing", orchestra.isPlaying());
+    public void update(boolean publishTelemetry) {
+        if (publishTelemetry) {
+            SmartDashboard.putBoolean("RobotMusic/Loaded", musicLoaded);
+            SmartDashboard.putBoolean("RobotMusic/Playing", orchestra.isPlaying());
+        }
 
         if (!musicLoaded) {
             return;

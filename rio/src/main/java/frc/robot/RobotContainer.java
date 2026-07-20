@@ -88,6 +88,11 @@ public class RobotContainer {
     private final Trigger rightTrigger = joystick.rightTrigger();
     private final Trigger rightBumper = joystick.rightBumper();
     private final Trigger aButton = joystick.a();
+    private final Trigger backupBackButton = backupController.back();
+    private final Trigger backupStartButton = backupController.start();
+    private final Trigger backupLeftBumper = backupController.leftBumper();
+    private final Trigger backupLeftTrigger = backupController.leftTrigger();
+    private final Trigger backupRightTrigger = backupController.rightTrigger();
 
     public final CommandSwerveDrivetrain drivetrain = TunerConstants.createDrivetrain();
     public final Turret turret = new Turret();
@@ -315,12 +320,8 @@ public class RobotContainer {
                     intake
                 )
             );
-        leftTrigger
-            .and(leftBumper.negate())
-            .and(rightTrigger.negate())
+        new Trigger(this::isShotPrepRequested)
             .and(new Trigger(DriverStation::isTeleopEnabled))
-            .and(backButton.negate())
-            .and(startButton.negate())
             .whileTrue(
                 new ShotPrepCommand(
                     drivetrain,
@@ -462,11 +463,23 @@ public class RobotContainer {
     }
 
     private boolean isShotPrepRequested() {
+        return isPrimaryShotPrepRequested() || isBackupShotPrepRequested();
+    }
+
+    private boolean isPrimaryShotPrepRequested() {
         return leftTrigger.getAsBoolean()
             && !leftBumper.getAsBoolean()
             && !rightTrigger.getAsBoolean()
             && !backButton.getAsBoolean()
             && !startButton.getAsBoolean();
+    }
+
+    private boolean isBackupShotPrepRequested() {
+        return backupLeftTrigger.getAsBoolean()
+            && !backupLeftBumper.getAsBoolean()
+            && !backupRightTrigger.getAsBoolean()
+            && !backupBackButton.getAsBoolean()
+            && !backupStartButton.getAsBoolean();
     }
 
     private boolean isReverseShotPathRequested() {

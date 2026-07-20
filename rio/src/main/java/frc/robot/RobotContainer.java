@@ -320,7 +320,7 @@ public class RobotContainer {
                     intake
                 )
             );
-        new Trigger(this::isShotPrepRequested)
+        new Trigger(this::isShotPrepCommandRequested)
             .and(new Trigger(DriverStation::isTeleopEnabled))
             .whileTrue(
                 new ShotPrepCommand(
@@ -464,6 +464,14 @@ public class RobotContainer {
 
     private boolean isShotPrepRequested() {
         return isPrimaryShotPrepRequested() || isBackupShotPrepRequested();
+    }
+
+    private boolean isShotPrepCommandRequested() {
+        // Scoring and reverse controls take priority so a held warmup request
+        // can resume immediately after either handoff completes.
+        return isShotPrepRequested()
+            && !isAutoScoreRequested()
+            && !isReverseShotPathRequested();
     }
 
     private boolean isPrimaryShotPrepRequested() {

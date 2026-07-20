@@ -18,6 +18,8 @@ import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
+import frc.robot.scoring.ScoringCalculator.ShotSetpoint;
+import frc.robot.scoring.ScoringCalculator.TargetMode;
 import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.robot.subsystems.Turret;
@@ -29,16 +31,19 @@ public class ScoringTelemetry {
     private final CommandSwerveDrivetrain drivetrain;
     private final Turret turret;
     private final Vision vision;
+    private final ShotDistanceTuning shotDistanceTuning;
     private final Field2d shotField = new Field2d();
 
     public ScoringTelemetry(
         CommandSwerveDrivetrain drivetrain,
         Turret turret,
-        Vision vision
+        Vision vision,
+        ShotDistanceTuning shotDistanceTuning
     ) {
         this.drivetrain = drivetrain;
         this.turret = turret;
         this.vision = vision;
+        this.shotDistanceTuning = shotDistanceTuning;
         SmartDashboard.putData(kDashboardPrefix + "Field", shotField);
     }
 
@@ -101,15 +106,23 @@ public class ScoringTelemetry {
                 ? TargetSelectionMode.HUB_ONLY
                 : TargetSelectionMode.AUTOMATIC
         );
+        ShotSetpoint shotSetpoint = shotDistanceTuning.evaluateShotSetpoint(
+            target.distanceMeters(),
+            target.mode() == TargetMode.HUB
+                ? ScoringConstants.kHubShotCurve
+                : ScoringConstants.kPassShotCurve,
+            target.mode() == TargetMode.PASS
+        );
 
         SmartDashboard.putBoolean(kDashboardPrefix + "TargetValid", true);
         SmartDashboard.putString(kDashboardPrefix + "Status", "READY_TO_TUNE");
-        publishTarget(target, hubVisionCorrectionDegrees);
+        publishTarget(target, shotSetpoint, hubVisionCorrectionDegrees);
         publishTurretState();
     }
 
     private void publishTarget(
         ScoringTarget target,
+        ShotSetpoint shotSetpoint,
         OptionalDouble hubVisionCorrectionDegrees
     ) {
         SmartDashboard.putString(kDashboardPrefix + "TargetMode", target.mode().name());
@@ -130,6 +143,10 @@ public class ScoringTelemetry {
         SmartDashboard.putNumber(kDashboardPrefix + "TurretFieldX", target.turretFieldPoint().getX());
         SmartDashboard.putNumber(kDashboardPrefix + "TurretFieldY", target.turretFieldPoint().getY());
         SmartDashboard.putNumber(kDashboardPrefix + "DistanceMeters", target.distanceMeters());
+        SmartDashboard.putNumber(
+            kDashboardPrefix + "InterpolationDistanceMeters",
+            shotDistanceTuning.getBelievedDistanceMeters(target.distanceMeters())
+        );
         SmartDashboard.putNumber(
             kDashboardPrefix + "DistanceFeet",
             Units.metersToFeet(target.distanceMeters())
@@ -155,19 +172,19 @@ public class ScoringTelemetry {
         );
         SmartDashboard.putNumber(
             kDashboardPrefix + "SuggestedPitchDegrees",
-            target.shotSetpoint().pitchDegrees()
+            shotSetpoint.pitchDegrees()
         );
         SmartDashboard.putNumber(
             kDashboardPrefix + "SuggestedFlywheelRps",
-            target.shotSetpoint().flywheelRotationsPerSecond()
+            shotSetpoint.flywheelRotationsPerSecond()
         );
         SmartDashboard.putNumber(
             kDashboardPrefix + "SuggestedFlywheelRpm",
-            60.0 * target.shotSetpoint().flywheelRotationsPerSecond()
+            60.0 * shotSetpoint.flywheelRotationsPerSecond()
         );
         SmartDashboard.putBoolean(
             kDashboardPrefix + "SuggestedFeedAllowedByDistance",
-            target.shotSetpoint().feedAllowedByDistance()
+            shotSetpoint.feedAllowedByDistance()
         );
         publishFieldTargetObjects(target);
     }

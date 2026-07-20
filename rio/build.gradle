@@ -1,3 +1,6 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
 plugins {
     id "java"
     id "edu.wpi.first.GradleRIO" version "2026.2.1"
@@ -104,4 +107,159 @@ wpi.java.configureTestTasks(test)
 // Configure string concat to always inline compile
 tasks.withType(JavaCompile) {
     options.compilerArgs.add '-XDstringConcat=inline'
+}
+
+def mirroredAutoSourceName = 'L.2'
+def mirroredAutoOutputName = 'R.2'
+def mirroredPathPrefix = "${mirroredAutoOutputName}-"
+def pathPlannerDirectory = file('src/main/deploy/pathplanner')
+def pathPlannerAutosDirectory = new File(pathPlannerDirectory, 'autos')
+def pathPlannerPathsDirectory = new File(pathPlannerDirectory, 'paths')
+def pathPlannerNavgridFile = new File(pathPlannerDirectory, 'navgrid.json')
+
+def generateMirroredR2Auto = tasks.register('generateMirroredR2Auto') {
+    group = 'pathplanner'
+    description = 'Generates R.2 by mirroring L.2 across the field center line.'
+
+    doLast {
+        def jsonParser = new JsonSlurper()
+        def sourceAutoFile = new File(
+            pathPlannerAutosDirectory,
+            "${mirroredAutoSourceName}.auto"
+        )
+        def outputAutoFile = new File(
+            pathPlannerAutosDirectory,
+            "${mirroredAutoOutputName}.auto"
+        )
+        def sourceAuto = jsonParser.parse(sourceAutoFile)
+        def navgrid = jsonParser.parse(pathPlannerNavgridFile)
+        double fieldWidthMeters = (navgrid.field_size.y as Number).doubleValue()
+
+        def swapLeftAndRight = { String value ->
+            value
+                .replace('Left', '__PATHPLANNER_MIRROR_LEFT__')
+                .replace('Right', 'Left')
+                .replace('__PATHPLANNER_MIRROR_LEFT__', 'Right')
+        }
+        def mirroredPathName = { String sourcePathName ->
+            "${mirroredPathPrefix}${sourcePathName}"
+        }
+
+        Closure mirrorCommandJson
+        mirrorCommandJson = { value ->
+            if (value instanceof Map) {
+                def mirrored = new LinkedHashMap()
+                value.each { key, nestedValue ->
+                    if (key == 'pathName' && nestedValue instanceof String) {
+                        mirrored[key] = mirroredPathName(nestedValue)
+                    } else if (key == 'name' && nestedValue instanceof String) {
+                        mirrored[key] = swapLeftAndRight(nestedValue)
+                    } else {
+                        mirrored[key] = mirrorCommandJson(nestedValue)
+                    }
+                }
+                return mirrored
+            }
+            if (value instanceof List) {
+                return value.collect { mirrorCommandJson(it) }
+            }
+            return value
+        }
+
+        Closure collectPathNames
+        collectPathNames = { value, Set<String> pathNames ->
+            if (value instanceof Map) {
+                if (
+                    value.type == 'path'
+                        && value.data instanceof Map
+                        && value.data.pathName instanceof String
+                ) {
+                    pathNames.add(value.data.pathName)
+                }
+                value.values().each { collectPathNames(it, pathNames) }
+            } else if (value instanceof List) {
+                value.each { collectPathNames(it, pathNames) }
+            }
+        }
+
+        def mirrorTranslation = { translation ->
+            if (translation instanceof Map) {
+                translation.y = fieldWidthMeters - (translation.y as Number).doubleValue()
+            }
+        }
+        def mirrorRotation = { state ->
+            if (state instanceof Map && state.rotation instanceof Number) {
+                state.rotation = -(state.rotation as Number).doubleValue()
+            }
+        }
+        def mirrorPath = { sourcePath ->
+            sourcePath.waypoints.each { waypoint ->
+                mirrorTranslation(waypoint.anchor)
+                mirrorTranslation(waypoint.prevControl)
+                mirrorTranslation(waypoint.nextControl)
+                if (waypoint.linkedName instanceof String) {
+                    waypoint.linkedName = waypoint.linkedName.replaceFirst('^L', 'R')
+                }
+            }
+            sourcePath.rotationTargets.each { rotationTarget ->
+                rotationTarget.rotationDegrees = -(
+                    rotationTarget.rotationDegrees as Number
+                ).doubleValue()
+            }
+            sourcePath.pointTowardsZones.each { pointTowardsZone ->
+                mirrorTranslation(pointTowardsZone.fieldPosition)
+            }
+            sourcePath.eventMarkers = mirrorCommandJson(sourcePath.eventMarkers)
+            mirrorRotation(sourcePath.goalEndState)
+            mirrorRotation(sourcePath.idealStartingState)
+            sourcePath.folder = 'R'
+            return sourcePath
+        }
+        def writeJson = { File outputFile, value ->
+            outputFile.parentFile.mkdirs()
+            outputFile.setText(
+                JsonOutput.prettyPrint(JsonOutput.toJson(value)) + System.lineSeparator(),
+                'UTF-8'
+            )
+        }
+
+        Set<String> sourcePathNames = new LinkedHashSet<>()
+        collectPathNames(sourceAuto.command, sourcePathNames)
+
+        Set<File> expectedMirroredPathFiles = new LinkedHashSet<>()
+        sourcePathNames.each { sourcePathName ->
+            def sourcePathFile = new File(
+                pathPlannerPathsDirectory,
+                "${sourcePathName}.path"
+            )
+            if (!sourcePathFile.isFile()) {
+                throw new GradleException(
+                    "${mirroredAutoSourceName} references missing path ${sourcePathName}."
+                )
+            }
+
+            def outputPathFile = new File(
+                pathPlannerPathsDirectory,
+                "${mirroredPathName(sourcePathName)}.path"
+            )
+            expectedMirroredPathFiles.add(outputPathFile)
+            writeJson(outputPathFile, mirrorPath(jsonParser.parse(sourcePathFile)))
+        }
+
+        fileTree(pathPlannerPathsDirectory) {
+            include "${mirroredPathPrefix}*.path"
+        }.files.each { generatedPathFile ->
+            if (!expectedMirroredPathFiles.contains(generatedPathFile)) {
+                generatedPathFile.delete()
+            }
+        }
+
+        def mirroredAuto = mirrorCommandJson(sourceAuto)
+        mirroredAuto.folder = null
+        writeJson(outputAutoFile, mirroredAuto)
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn generateMirroredR2Auto
 }

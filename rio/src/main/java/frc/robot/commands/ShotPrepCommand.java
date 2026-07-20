@@ -17,8 +17,11 @@ import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.TelemetryRateLimiter;
 import frc.robot.scoring.ScoringCalculator;
+import frc.robot.scoring.ScoringCalculator.ShotSetpoint;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
+import frc.robot.scoring.ScoringCalculator.TargetMode;
 import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
+import frc.robot.scoring.ShotDistanceTuning;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.robot.subsystems.Turret;
 import frc.robot.subsystems.Vision;
@@ -28,6 +31,7 @@ public class ShotPrepCommand extends Command {
     private final Turret turret;
     private final Vision vision;
     private final BooleanSupplier scoreRequestedSupplier;
+    private final ShotDistanceTuning shotDistanceTuning;
     private final TelemetryRateLimiter telemetryRateLimiter =
         TelemetryRateLimiter.forRobotTelemetryPhase(3);
 
@@ -35,12 +39,14 @@ public class ShotPrepCommand extends Command {
         CommandSwerveDrivetrain drivetrain,
         Turret turret,
         Vision vision,
-        BooleanSupplier scoreRequestedSupplier
+        BooleanSupplier scoreRequestedSupplier,
+        ShotDistanceTuning shotDistanceTuning
     ) {
         this.drivetrain = drivetrain;
         this.turret = turret;
         this.vision = vision;
         this.scoreRequestedSupplier = scoreRequestedSupplier;
+        this.shotDistanceTuning = shotDistanceTuning;
 
         addRequirements(turret);
     }
@@ -84,11 +90,18 @@ public class ShotPrepCommand extends Command {
                 ? TargetSelectionMode.HUB_ONLY
                 : TargetSelectionMode.AUTOMATIC
         );
+        ShotSetpoint shotSetpoint = shotDistanceTuning.evaluateShotSetpoint(
+            target.distanceMeters(),
+            target.mode() == TargetMode.HUB
+                ? ScoringConstants.kHubShotCurve
+                : ScoringConstants.kPassShotCurve,
+            target.mode() == TargetMode.PASS
+        );
 
         turret.setTargetHeadingDegrees(target.turretHeadingDegrees());
-        turret.setTargetPitchDegrees(target.shotSetpoint().pitchDegrees());
+        turret.setTargetPitchDegrees(shotSetpoint.pitchDegrees());
         turret.runFlywheelAtVelocityRotationsPerSecond(
-            target.shotSetpoint().flywheelRotationsPerSecond()
+            shotSetpoint.flywheelRotationsPerSecond()
         );
 
         if (publishTelemetry) {
@@ -100,11 +113,11 @@ public class ShotPrepCommand extends Command {
             );
             SmartDashboard.putNumber(
                 "ShotPrep/TargetPitchDegrees",
-                target.shotSetpoint().pitchDegrees()
+                shotSetpoint.pitchDegrees()
             );
             SmartDashboard.putNumber(
                 "ShotPrep/TargetFlywheelRps",
-                target.shotSetpoint().flywheelRotationsPerSecond()
+                shotSetpoint.flywheelRotationsPerSecond()
             );
         }
     }

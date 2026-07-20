@@ -258,6 +258,7 @@ public final class Constants {
         public static final double kMaxShotPitchDegrees = TurretPitchConstants.kMaxPitchDegrees;
         public static final double kMinShotFlywheelRotationsPerSecond = 20.0;
         public static final double kMaxShotFlywheelRotationsPerSecond = 60.0;
+        public static final double kShotDistanceMultiplierStep = 0.05;
 
         // Hub map is measured through 4.63 m; the 5.60 m endpoint bounds polynomial extrapolation.
         // Pass map is provisional until calibrated.
@@ -512,7 +513,7 @@ public final class Constants {
 
         public static final double kJamMinimumCommandedOutput = 0.20;
         public static final double kJamCurrentThresholdAmps =
-            kStatorCurrentLimitAmps * 0.80;
+            kStatorCurrentLimitAmps * 1.00;
         public static final double kJamVelocityThresholdRotationsPerSecond = 1.0;
         public static final double kJamQualificationSeconds = 0.20;
         public static final double kJamReverseSeconds = 0.20;

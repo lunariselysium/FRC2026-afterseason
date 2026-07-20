@@ -179,6 +179,10 @@ logs/
 # Folder that has CTRE Phoenix Sim device config storage
 ctre_sim/
 
+# Generated from L.2 by the generateMirroredR2Auto Gradle task.
+/src/main/deploy/pathplanner/autos/R.2.auto
+/src/main/deploy/pathplanner/paths/R.2-*.path
+
 # clangd
 /.cache
 compile_commands.json

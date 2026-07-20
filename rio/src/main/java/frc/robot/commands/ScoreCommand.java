@@ -17,8 +17,11 @@ import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.ScoringConstants;
 import frc.robot.TelemetryRateLimiter;
 import frc.robot.scoring.ScoringCalculator;
+import frc.robot.scoring.ScoringCalculator.ShotSetpoint;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
+import frc.robot.scoring.ScoringCalculator.TargetMode;
 import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
+import frc.robot.scoring.ShotDistanceTuning;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.robot.subsystems.Feeder;
 import frc.robot.subsystems.Turret;
@@ -30,6 +33,7 @@ public class ScoreCommand extends Command {
     private final Feeder feeder;
     private final Vision vision;
     private final BooleanSupplier shotPrepRequestedSupplier;
+    private final ShotDistanceTuning shotDistanceTuning;
     private final TelemetryRateLimiter telemetryRateLimiter =
         TelemetryRateLimiter.forRobotTelemetryPhase(4);
     private final FeedControlStateMachine feedController = new FeedControlStateMachine(
@@ -46,13 +50,15 @@ public class ScoreCommand extends Command {
         Turret turret,
         Feeder feeder,
         Vision vision,
-        BooleanSupplier shotPrepRequestedSupplier
+        BooleanSupplier shotPrepRequestedSupplier,
+        ShotDistanceTuning shotDistanceTuning
     ) {
         this.drivetrain = drivetrain;
         this.turret = turret;
         this.feeder = feeder;
         this.vision = vision;
         this.shotPrepRequestedSupplier = shotPrepRequestedSupplier;
+        this.shotDistanceTuning = shotDistanceTuning;
 
         addRequirements(turret, feeder);
     }
@@ -101,15 +107,22 @@ public class ScoreCommand extends Command {
                 ? TargetSelectionMode.HUB_ONLY
                 : TargetSelectionMode.AUTOMATIC
         );
+        ShotSetpoint shotSetpoint = shotDistanceTuning.evaluateShotSetpoint(
+            target.distanceMeters(),
+            target.mode() == TargetMode.HUB
+                ? ScoringConstants.kHubShotCurve
+                : ScoringConstants.kPassShotCurve,
+            target.mode() == TargetMode.PASS
+        );
 
         turret.setTargetHeadingDegrees(target.turretHeadingDegrees());
-        turret.setTargetPitchDegrees(target.shotSetpoint().pitchDegrees());
+        turret.setTargetPitchDegrees(shotSetpoint.pitchDegrees());
         turret.runFlywheelAtVelocityRotationsPerSecond(
-            target.shotSetpoint().flywheelRotationsPerSecond(),
+            shotSetpoint.flywheelRotationsPerSecond(),
             ShotFeedforwardPolicy.getAdditionalFeedforwardVolts(target.mode())
         );
 
-        boolean feedInterlocksReady = target.shotSetpoint().feedAllowedByDistance()
+        boolean feedInterlocksReady = shotSetpoint.feedAllowedByDistance()
             && turret.isHeadingAtTarget()
             && turret.isPitchAtTarget();
         boolean flywheelReady = turret.isFlywheelReadyToShoot();
@@ -122,7 +135,13 @@ public class ScoreCommand extends Command {
         applyFeedMode(feedMode);
 
         if (publishTelemetry) {
-            publishTargetTelemetry(target, hubVisionCorrectionDegrees, ready, feedMode);
+            publishTargetTelemetry(
+                target,
+                shotSetpoint,
+                hubVisionCorrectionDegrees,
+                ready,
+                feedMode
+            );
         }
     }
 
@@ -176,6 +195,7 @@ public class ScoreCommand extends Command {
 
     private void publishTargetTelemetry(
         ScoringTarget target,
+        ShotSetpoint shotSetpoint,
         OptionalDouble hubVisionCorrectionDegrees,
         boolean ready,
         FeedControlStateMachine.OutputMode feedMode
@@ -199,6 +219,10 @@ public class ScoreCommand extends Command {
         SmartDashboard.putNumber("Scoring/TurretFieldX", target.turretFieldPoint().getX());
         SmartDashboard.putNumber("Scoring/TurretFieldY", target.turretFieldPoint().getY());
         SmartDashboard.putNumber("Scoring/DistanceMeters", target.distanceMeters());
+        SmartDashboard.putNumber(
+            "Scoring/InterpolationDistanceMeters",
+            shotDistanceTuning.getBelievedDistanceMeters(target.distanceMeters())
+        );
         SmartDashboard.putNumber("Scoring/FieldBearingDegrees", target.fieldBearingDegrees());
         SmartDashboard.putNumber("Scoring/TurretHeadingDegrees", target.turretHeadingDegrees());
         SmartDashboard.putNumber("Scoring/VisualTrimDegrees", target.visualTrimDegrees());
@@ -212,10 +236,10 @@ public class ScoreCommand extends Command {
                 ? hubVisionCorrectionDegrees.getAsDouble()
                 : 0.0
         );
-        SmartDashboard.putNumber("Scoring/PitchDegrees", target.shotSetpoint().pitchDegrees());
+        SmartDashboard.putNumber("Scoring/PitchDegrees", shotSetpoint.pitchDegrees());
         SmartDashboard.putNumber(
             "Scoring/FlywheelRps",
-            target.shotSetpoint().flywheelRotationsPerSecond()
+            shotSetpoint.flywheelRotationsPerSecond()
         );
         SmartDashboard.putNumber(
             "Scoring/FlywheelFeedingLoadFeedforwardVolts",
@@ -227,7 +251,7 @@ public class ScoreCommand extends Command {
         );
         SmartDashboard.putBoolean(
             "Scoring/FeedAllowedByDistance",
-            target.shotSetpoint().feedAllowedByDistance()
+            shotSetpoint.feedAllowedByDistance()
         );
         SmartDashboard.putBoolean("Scoring/HeadingReady", turret.isHeadingAtTarget());
         SmartDashboard.putBoolean("Scoring/PitchReady", turret.isPitchAtTarget());

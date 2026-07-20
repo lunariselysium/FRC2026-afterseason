@@ -42,6 +42,7 @@ import frc.robot.scoring.ScoringCalculator;
 import frc.robot.scoring.ScoringCalculator.ScoringTarget;
 import frc.robot.scoring.ScoringCalculator.TargetSelectionMode;
 import frc.robot.scoring.ScoringTelemetry;
+import frc.robot.scoring.ShotDistanceTuning;
 import frc.robot.scoring.ShotTuningControls;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.robot.subsystems.Feeder;
@@ -93,8 +94,16 @@ public class RobotContainer {
     public final Vision vision = new Vision(drivetrain, turret);
     public final Intake intake = new Intake();
     public final Feeder feeder = new Feeder();
+    private final ShotDistanceTuning shotDistanceTuning = new ShotDistanceTuning();
     private final ScoreCommand scoreCommand =
-        new ScoreCommand(drivetrain, turret, feeder, vision, this::isShotPrepRequested);
+        new ScoreCommand(
+            drivetrain,
+            turret,
+            feeder,
+            vision,
+            this::isShotPrepRequested,
+            shotDistanceTuning
+        );
     private final AutoScoreIntakeAssist autoScoreIntakeAssist = new AutoScoreIntakeAssist();
     private final PathPlannerMechanismRequests pathPlannerMechanismRequests =
         new PathPlannerMechanismRequests();
@@ -102,7 +111,7 @@ public class RobotContainer {
     private boolean autoScoreIntakeControlsRollers;
     private boolean feederJamRecoveryWasActive;
     private final ScoringTelemetry scoringTelemetry =
-        new ScoringTelemetry(drivetrain, turret, vision);
+        new ScoringTelemetry(drivetrain, turret, vision, shotDistanceTuning);
     private final ShotTuningControls shotTuningControls = new ShotTuningControls(turret);
     private final RobotMusic robotMusic = new RobotMusic();
     private final RebuiltMatchStatePublisher rebuiltMatchStatePublisher =
@@ -113,6 +122,10 @@ public class RobotContainer {
         configurePathPlannerBindings();
         autonomousChooser = createAutonomousChooser();
         SmartDashboard.putData("Auto Chooser", autonomousChooser);
+        SmartDashboard.putNumber(
+            "ShotTuning/DistanceMultiplier",
+            shotDistanceTuning.getMultiplier()
+        );
         configureBindings();
     }
 
@@ -313,7 +326,8 @@ public class RobotContainer {
                     drivetrain,
                     turret,
                     vision,
-                    this::isAutoScoreRequested
+                    this::isAutoScoreRequested,
+                    shotDistanceTuning
                 )
             );
         rightTrigger
@@ -356,6 +370,24 @@ public class RobotContainer {
         backupController.rightStick()
             .and(backupController.povRight())
             .onTrue(Commands.runOnce(turret::shiftHeadingEncoderRotationRight, turret));
+        backupController.rightStick()
+            .and(backupController.povUp())
+            .onTrue(Commands.runOnce(() -> {
+                shotDistanceTuning.incrementMultiplier();
+                SmartDashboard.putNumber(
+                    "ShotTuning/DistanceMultiplier",
+                    shotDistanceTuning.getMultiplier()
+                );
+            }));
+        backupController.rightStick()
+            .and(backupController.povDown())
+            .onTrue(Commands.runOnce(() -> {
+                shotDistanceTuning.decrementMultiplier();
+                SmartDashboard.putNumber(
+                    "ShotTuning/DistanceMultiplier",
+                    shotDistanceTuning.getMultiplier()
+                );
+            }));
         joystick.povUp()
             .and(joystick.back().negate())
             .and(joystick.start().negate())

@@ -156,10 +156,6 @@ public final class Constants {
 
         public static final int kPrimaryControllerPort = 0;
         public static final int kBackupControllerPort = 1;
-        public static final double kShiftRumbleStrength = 0.8;
-        public static final double kShiftWarningPulseSeconds = 0.10;
-        public static final double kShiftWarningGapSeconds = 0.08;
-        public static final double kShiftEndPulseSeconds = 0.35;
         public static final double kJamWarningRumbleStrength = 0.8;
     }
 

@@ -25,18 +25,6 @@ class RebuiltMatchStateTest {
     }
 
     @Test
-    void identifiesFiveSecondWarningAndShiftEndWindows() {
-        assertTrue(RebuiltMatchState.isFiveSecondsBeforeShiftEnd(135.0));
-        assertTrue(RebuiltMatchState.isFiveSecondsBeforeShiftEnd(134.9));
-        assertFalse(RebuiltMatchState.isFiveSecondsBeforeShiftEnd(134.7));
-
-        assertTrue(RebuiltMatchState.isImmediatelyAfterShiftEnd(130.0));
-        assertTrue(RebuiltMatchState.isImmediatelyAfterShiftEnd(129.9));
-        assertFalse(RebuiltMatchState.isImmediatelyAfterShiftEnd(129.7));
-        assertTrue(RebuiltMatchState.isImmediatelyAfterShiftEnd(0.0));
-    }
-
-    @Test
     void reportsHubActiveFromAllianceGameDataAndShift() {
         assertFalse(RebuiltMatchState.isHubActive(
             Optional.empty(), false, true, 120.0, "R"

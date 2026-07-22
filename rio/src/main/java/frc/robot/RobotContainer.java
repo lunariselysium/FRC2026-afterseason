@@ -404,52 +404,9 @@ public class RobotContainer {
             .and(backButton.negate())
             .and(startButton.negate())
             .whileTrue(scoreCommand);
-        configureShiftRumbleFeedback();
 
         // SysId routines intentionally have no controller bindings in competition code.
         drivetrain.registerTelemetry(logger::telemeterize);
-    }
-
-    private void configureShiftRumbleFeedback() {
-        new Trigger(() ->
-            DriverStation.isTeleop()
-                && RebuiltMatchState.isFiveSecondsBeforeShiftEnd(DriverStation.getMatchTime())
-        ).onTrue(createShiftWarningRumbleCommand());
-
-        new Trigger(() ->
-            DriverStation.isTeleop()
-                && RebuiltMatchState.isImmediatelyAfterShiftEnd(DriverStation.getMatchTime())
-        ).onTrue(createShiftEndRumbleCommand());
-    }
-
-    private Command createShiftWarningRumbleCommand() {
-        return Commands.sequence(
-            Commands.runOnce(() ->
-                setPrimaryControllerRumble(OperatorConstants.kShiftRumbleStrength)
-            ),
-            Commands.waitSeconds(OperatorConstants.kShiftWarningPulseSeconds),
-            Commands.runOnce(() -> setPrimaryControllerRumble(0.0)),
-            Commands.waitSeconds(OperatorConstants.kShiftWarningGapSeconds),
-            Commands.runOnce(() ->
-                setPrimaryControllerRumble(OperatorConstants.kShiftRumbleStrength)
-            ),
-            Commands.waitSeconds(OperatorConstants.kShiftWarningPulseSeconds),
-            Commands.runOnce(() -> setPrimaryControllerRumble(0.0))
-        ).ignoringDisable(true).finallyDo(interrupted -> setPrimaryControllerRumble(0.0));
-    }
-
-    private Command createShiftEndRumbleCommand() {
-        return Commands.sequence(
-            Commands.runOnce(() ->
-                setPrimaryControllerRumble(OperatorConstants.kShiftRumbleStrength)
-            ),
-            Commands.waitSeconds(OperatorConstants.kShiftEndPulseSeconds),
-            Commands.runOnce(() -> setPrimaryControllerRumble(0.0))
-        ).ignoringDisable(true).finallyDo(interrupted -> setPrimaryControllerRumble(0.0));
-    }
-
-    private void setPrimaryControllerRumble(double strength) {
-        joystick.getHID().setRumble(RumbleType.kBothRumble, strength);
     }
 
     private void setJamWarningRumble(double strength) {

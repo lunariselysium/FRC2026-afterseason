@@ -6,14 +6,6 @@ import edu.wpi.first.wpilibj.DriverStation.Alliance;
 
 /** Pure 2026 REBUILT shift timing and hub-state calculations. */
 final class RebuiltMatchState {
-    private static final double kCueDetectionWindowSeconds = 0.25;
-    private static final double[] kShiftEndTimesSeconds = {
-        130.0, 105.0, 80.0, 55.0, 30.0, 0.0
-    };
-    private static final double[] kFiveSecondWarningTimesSeconds = {
-        135.0, 110.0, 85.0, 60.0, 35.0, 5.0
-    };
-
     private RebuiltMatchState() {}
 
     static double shiftTimeRemainingSeconds(boolean teleop, double matchTimeSeconds) {
@@ -34,14 +26,6 @@ final class RebuiltMatchState {
         }
 
         return Math.max(0.0, matchTimeSeconds);
-    }
-
-    static boolean isFiveSecondsBeforeShiftEnd(double matchTimeSeconds) {
-        return isInCueWindow(matchTimeSeconds, kFiveSecondWarningTimesSeconds);
-    }
-
-    static boolean isImmediatelyAfterShiftEnd(double matchTimeSeconds) {
-        return isInCueWindow(matchTimeSeconds, kShiftEndTimesSeconds);
     }
 
     static boolean isHubActive(
@@ -91,15 +75,5 @@ final class RebuiltMatchState {
         }
 
         return true;
-    }
-
-    private static boolean isInCueWindow(double matchTimeSeconds, double[] cueTimesSeconds) {
-        for (double cueTimeSeconds : cueTimesSeconds) {
-            if (matchTimeSeconds <= cueTimeSeconds
-                && matchTimeSeconds > cueTimeSeconds - kCueDetectionWindowSeconds) {
-                return true;
-            }
-        }
-        return false;
     }
 }

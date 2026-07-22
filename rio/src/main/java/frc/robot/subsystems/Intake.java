@@ -56,11 +56,11 @@ public class Intake extends SubsystemBase {
     private final MotionMagicVoltage positionRequest = new MotionMagicVoltage(0.0);
 
     private boolean autoScoreRetractionMotionProfileActive;
-    private boolean jamRecoveryPositionOverrideActive;
-    private boolean jamRecoveryResumeAutoScoreRetractionMotionProfile;
+    private boolean manualUnjamPositionOverrideActive;
+    private boolean manualUnjamResumeAutoScoreRetractionMotionProfile;
     private IntakeHomingPlan activeHomingPlan = kDeployedHomingPlan;
     private double targetPositionMotorRotations;
-    private double jamRecoveryTargetPositionMotorRotations;
+    private double manualUnjamTargetPositionMotorRotations;
     private double appliedDeployMotorOutput;
     private double appliedDeployMechanismVoltage;
     private double appliedClosedLoopFeedForwardVolts;
@@ -178,35 +178,35 @@ public class Intake extends SubsystemBase {
         return sysIdActive;
     }
 
-    public boolean isJamRecoveryPositionOverrideActive() {
-        return jamRecoveryPositionOverrideActive;
+    public boolean isManualUnjamPositionOverrideActive() {
+        return manualUnjamPositionOverrideActive;
     }
 
-    public void beginJamRecoveryOutwardMove() {
-        if (jamRecoveryPositionOverrideActive
+    public void beginManualUnjamOutwardMove() {
+        if (manualUnjamPositionOverrideActive
             || !isPositionControlAllowed()
             || isHoming()
             || isSysIdActive()) {
             return;
         }
 
-        jamRecoveryResumeAutoScoreRetractionMotionProfile =
+        manualUnjamResumeAutoScoreRetractionMotionProfile =
             autoScoreRetractionMotionProfileActive;
-        jamRecoveryTargetPositionMotorRotations =
-            calculateJamRecoveryTargetPositionMotorRotations(
+        manualUnjamTargetPositionMotorRotations =
+            calculateManualUnjamTargetPositionMotorRotations(
                 getIntakePositionMotorRotations()
             );
-        jamRecoveryPositionOverrideActive = true;
+        manualUnjamPositionOverrideActive = true;
         useNormalDeployMotionProfile();
     }
 
-    public void endJamRecoveryOutwardMove() {
-        if (!jamRecoveryPositionOverrideActive) {
+    public void endManualUnjamOutwardMove() {
+        if (!manualUnjamPositionOverrideActive) {
             return;
         }
 
-        jamRecoveryPositionOverrideActive = false;
-        if (jamRecoveryResumeAutoScoreRetractionMotionProfile) {
+        manualUnjamPositionOverrideActive = false;
+        if (manualUnjamResumeAutoScoreRetractionMotionProfile) {
             useAutoScoreRetractionMotionProfile();
         } else {
             useNormalDeployMotionProfile();
@@ -280,7 +280,7 @@ public class Intake extends SubsystemBase {
     }
 
     private void startHoming(IntakeHomingPlan homingPlan) {
-        endJamRecoveryOutwardMove();
+        endManualUnjamOutwardMove();
         activeHomingPlan = homingPlan;
         applyDeployHomingCurrentLimits();
         homing = true;
@@ -322,21 +322,21 @@ public class Intake extends SubsystemBase {
             setDeployMotorOutput(0.0);
             stopRollers();
         } else if (isSysIdActive()) {
-            jamRecoveryPositionOverrideActive = false;
+            manualUnjamPositionOverrideActive = false;
             positionControlActive = false;
             homing = false;
             resetDeployedHardstopCapture();
         } else if (homing) {
-            jamRecoveryPositionOverrideActive = false;
+            manualUnjamPositionOverrideActive = false;
             updateHomingControl();
         } else if (!isPositionControlAllowed()) {
-            jamRecoveryPositionOverrideActive = false;
+            manualUnjamPositionOverrideActive = false;
             targetPositionMotorRotations = getIntakePositionMotorRotations();
             positionControlActive = false;
             resetDeployedHardstopCapture();
             setDeployMotorOutput(0.0);
-        } else if (jamRecoveryPositionOverrideActive) {
-            setDeployMotionMagicTarget(jamRecoveryTargetPositionMotorRotations);
+        } else if (manualUnjamPositionOverrideActive) {
+            setDeployMotionMagicTarget(manualUnjamTargetPositionMotorRotations);
         } else if (!isPositionControlActive()) {
             deployedHardstopCurrentHigh = false;
             setDeployMotorOutput(0.0);
@@ -375,12 +375,12 @@ public class Intake extends SubsystemBase {
         SmartDashboard.putBoolean("Intake/DeployedHardstopCurrentHigh", deployedHardstopCurrentHigh);
         SmartDashboard.putBoolean("Intake/DeployedHardstopCaptured", deployedHardstopCaptured);
         SmartDashboard.putBoolean(
-            "Intake/JamRecoveryPositionOverrideActive",
-            isJamRecoveryPositionOverrideActive()
+            "Intake/ManualUnjamPositionOverrideActive",
+            isManualUnjamPositionOverrideActive()
         );
         SmartDashboard.putNumber(
-            "Intake/JamRecoveryTargetMotorRotations",
-            jamRecoveryTargetPositionMotorRotations
+            "Intake/ManualUnjamTargetMotorRotations",
+            manualUnjamTargetPositionMotorRotations
         );
     }
 
@@ -442,7 +442,7 @@ public class Intake extends SubsystemBase {
     }
 
     private void prepareDeploySysId() {
-        endJamRecoveryOutwardMove();
+        endManualUnjamOutwardMove();
         applyDeployOperatingCurrentLimits();
         homing = false;
         positionControlActive = false;
@@ -625,13 +625,13 @@ public class Intake extends SubsystemBase {
         );
     }
 
-    static double calculateJamRecoveryTargetPositionMotorRotations(
+    static double calculateManualUnjamTargetPositionMotorRotations(
         double currentPositionMotorRotations
     ) {
         return MathUtil.clamp(
             currentPositionMotorRotations
                 + IntakeConstants.kDeployedSetpointMotorRotations
-                    * IntakeConstants.kJamRecoveryOutwardTravelFraction,
+                    * IntakeConstants.kManualUnjamOutwardTravelFraction,
             0.0,
             IntakeConstants.kDeployedSetpointMotorRotations
         );
@@ -650,8 +650,8 @@ public class Intake extends SubsystemBase {
     }
 
     private void requestNormalDeployMotionProfile() {
-        if (jamRecoveryPositionOverrideActive) {
-            jamRecoveryResumeAutoScoreRetractionMotionProfile = false;
+        if (manualUnjamPositionOverrideActive) {
+            manualUnjamResumeAutoScoreRetractionMotionProfile = false;
             return;
         }
 
@@ -671,8 +671,8 @@ public class Intake extends SubsystemBase {
     }
 
     private void requestAutoScoreRetractionMotionProfile() {
-        if (jamRecoveryPositionOverrideActive) {
-            jamRecoveryResumeAutoScoreRetractionMotionProfile = true;
+        if (manualUnjamPositionOverrideActive) {
+            manualUnjamResumeAutoScoreRetractionMotionProfile = true;
             return;
         }
 

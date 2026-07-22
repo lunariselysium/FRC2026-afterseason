@@ -147,7 +147,7 @@ public final class Constants {
     public static final class DriveConstants {
         private DriveConstants() {}
 
-        public static final double kNormalSupplyCurrentLimitAmps = 40.0;
+        public static final double kNormalSupplyCurrentLimitAmps = 25.0;
         public static final double kShootingSupplyCurrentLimitAmps = 2.0;
     }
 
@@ -160,6 +160,7 @@ public final class Constants {
         public static final double kShiftWarningPulseSeconds = 0.10;
         public static final double kShiftWarningGapSeconds = 0.08;
         public static final double kShiftEndPulseSeconds = 0.35;
+        public static final double kJamWarningRumbleStrength = 0.8;
     }
 
     public static final class AutoConstants {
@@ -516,7 +517,7 @@ public final class Constants {
             kStatorCurrentLimitAmps * 1.00;
         public static final double kJamVelocityThresholdRotationsPerSecond = 1.0;
         public static final double kJamQualificationSeconds = 0.20;
-        public static final double kJamReverseSeconds = 0.20;
+        public static final double kManualUnjamReverseSeconds = 0.20;
 
         public static final boolean kBeltFollowerOpposesLeader = false;
     }
@@ -535,14 +536,14 @@ public final class Constants {
         public static final double kDrivenPulleyTeeth = 28.0;
         public static final double kRackPinionGearTeeth = 27.0;
 
-        public static final double kDeployedSetpointMotorRotations = 20.8;
+        public static final double kDeployedSetpointMotorRotations = 20.0;
         public static final double kAutoScoreRetractionDeployedFraction = 0.50;
         public static final double kAutoScoreRetractionSetpointMotorRotations =
             kDeployedSetpointMotorRotations * kAutoScoreRetractionDeployedFraction;
         public static final double kAutoScoreOscillationDeployedFraction = 0.80;
         public static final double kAutoScoreOscillationSetpointMotorRotations =
             kDeployedSetpointMotorRotations * kAutoScoreOscillationDeployedFraction;
-        public static final double kJamRecoveryOutwardTravelFraction = 0.20;
+        public static final double kManualUnjamOutwardTravelFraction = 0.20;
         public static final double kAutoScoreRetractionDelaySeconds = 1.0;
         public static final double kAutoScoreOscillationPhaseSeconds = 1.0;
         public static final double kPositionToleranceMotorRotations = 0.5;
@@ -557,7 +558,7 @@ public final class Constants {
         public static final double kMotionMagicAccelerationMotorRotationsPerSecondSquared = 144.0;
         public static final double kAutoScoreRetractionCruiseVelocityMotorRotationsPerSecond = 10.4;
         public static final double kAutoScoreRetractionAccelerationMotorRotationsPerSecondSquared = 20.8;
-        public static final double kDeployedHardstopCaptureCurrentThresholdAmps = 15.0;
+        public static final double kDeployedHardstopCaptureCurrentThresholdAmps = 7.0;
         public static final double kDeployedHardstopCaptureWindowMotorRotations = 1.2;
 
         // Positive mechanism position is deploying; positive raw motor position retracts.
@@ -565,12 +566,12 @@ public final class Constants {
 
         // Positive mechanism position is deploying; positive motor output retracts.
         public static final double kPositionMotorOutputSign = -1.0;
-        public static final double kDeploySupplyCurrentLimitAmps = 20.0;
-        public static final double kDeployStatorCurrentLimitAmps = 20.0;
+        public static final double kDeploySupplyCurrentLimitAmps = 14.0;
+        public static final double kDeployStatorCurrentLimitAmps = 14.0;
         public static final double kDeployHomingSupplyCurrentLimitAmps = 30.0;
         public static final double kDeployHomingStatorCurrentLimitAmps = 30.0;
 
-        public static final double kHomingCurrentThresholdAmps = 25.0;
+        public static final double kHomingCurrentThresholdAmps = 15.0;
         public static final double kHomingMinRunTimeSeconds = 0.10;
         public static final double kHomingCurrentDebounceSeconds = 0.10;
         public static final double kHomingTimeoutSeconds = 10.0;

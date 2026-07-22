@@ -38,11 +38,10 @@ public class Feeder extends SubsystemBase {
         FeederConstants.kBeltFollowerMotorCanId,
         feederCanBus
     );
-    private final FeederJamRecoveryController jamRecoveryController =
-        new FeederJamRecoveryController(
-            FeederConstants.kJamQualificationSeconds,
-            FeederConstants.kJamReverseSeconds
-        );
+    private final FeederJamMonitor jamMonitor =
+        new FeederJamMonitor(FeederConstants.kJamQualificationSeconds);
+    private final FeederUnjamController unjamController =
+        new FeederUnjamController(FeederConstants.kManualUnjamReverseSeconds);
 
     private double targetFloorOutput;
     private double targetBeltOutput;
@@ -191,32 +190,46 @@ public class Feeder extends SubsystemBase {
             || targetHandoffWheelOutput != 0.0;
     }
 
-    public boolean isJamRecoveryActive() {
-        return jamRecoveryController.isRecoveryActive();
+    public boolean isJamWarningActive() {
+        return jamMonitor.isJamWarningActive();
+    }
+
+    public boolean requestUnjam() {
+        if (DriverStation.isDisabled()) {
+            return false;
+        }
+
+        return unjamController.request(Timer.getFPGATimestamp());
+    }
+
+    public boolean isUnjamActive() {
+        return unjamController.isActive();
     }
 
     public void updateControlAndTelemetry(boolean publishTelemetry) {
+        double timestampSeconds = Timer.getFPGATimestamp();
         if (DriverStation.isDisabled()) {
             stopAll();
+            unjamController.cancel();
         }
 
         updateMeasurementsAndJamStatus();
-        FeederJamRecoveryController.OutputMode outputMode = jamRecoveryController.update(
-            Timer.getFPGATimestamp(),
+        jamMonitor.update(
+            timestampSeconds,
             isForwardFeedRequested(),
             floorJammed,
             handoffWheelJammed,
             beltLeaderJammed,
             beltFollowerJammed
         );
-        TargetOutputs appliedOutputs = outputMode == FeederJamRecoveryController.OutputMode.REVERSE
+        boolean unjamActive = unjamController.update(timestampSeconds);
+        TargetOutputs appliedOutputs = unjamActive
             ? calculateReversedOutputs()
             : new TargetOutputs(
                 targetFloorOutput,
                 targetBeltOutput,
                 targetHandoffWheelOutput
             );
-
         setFloorMotorOutput(appliedOutputs.floorOutput());
         setBeltMotorOutput(appliedOutputs.beltOutput());
         setHandoffWheelMotorOutput(appliedOutputs.handoffWheelOutput());
@@ -262,7 +275,8 @@ public class Feeder extends SubsystemBase {
         SmartDashboard.putBoolean("Feeder/HandoffWheelJammed", handoffWheelJammed);
         SmartDashboard.putBoolean("Feeder/BeltLeaderJammed", beltLeaderJammed);
         SmartDashboard.putBoolean("Feeder/BeltFollowerJammed", beltFollowerJammed);
-        SmartDashboard.putBoolean("Feeder/JamRecoveryActive", isJamRecoveryActive());
+        SmartDashboard.putBoolean("Feeder/JamWarningActive", isJamWarningActive());
+        SmartDashboard.putBoolean("Feeder/ManualUnjamActive", isUnjamActive());
     }
 
     private MotorAlignmentValue getBeltFollowerMotorAlignment() {

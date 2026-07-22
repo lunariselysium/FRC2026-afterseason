@@ -12,19 +12,19 @@ import frc.robot.Constants.IntakeConstants;
 
 class IntakeTest {
     @Test
-    void jamRecoveryTargetMovesTwentyPercentOfTravelOutward() {
+    void manualUnjamTargetMovesTwentyPercentOfTravelOutward() {
         assertEquals(
             14.56,
-            Intake.calculateJamRecoveryTargetPositionMotorRotations(10.4),
+            Intake.calculateManualUnjamTargetPositionMotorRotations(10.4),
             1.0e-9
         );
     }
 
     @Test
-    void jamRecoveryTargetClampsAtDeployedLimit() {
+    void manualUnjamTargetClampsAtDeployedLimit() {
         assertEquals(
             IntakeConstants.kDeployedSetpointMotorRotations,
-            Intake.calculateJamRecoveryTargetPositionMotorRotations(19.0),
+            Intake.calculateManualUnjamTargetPositionMotorRotations(19.0),
             1.0e-9
         );
     }

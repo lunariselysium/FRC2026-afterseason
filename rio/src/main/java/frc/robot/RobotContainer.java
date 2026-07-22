@@ -54,7 +54,7 @@ public class RobotContainer {
     private static final Voltage kDriveSpeedTestVoltage = Volts.of(12.0);
 
     private final double maxSpeedMetersPerSecond =
-        TunerConstants.kSpeedAt12Volts.in(MetersPerSecond);
+        TunerConstants.kSpeedAt12Volts.in(MetersPerSecond) * 0.7;
     private final double maxAngularRateRadiansPerSecond =
         RotationsPerSecond.of(0.75).in(RadiansPerSecond);
 
@@ -114,7 +114,8 @@ public class RobotContainer {
         new PathPlannerMechanismRequests();
     private boolean pathPlannerAutoScoreRunning;
     private boolean autoScoreIntakeControlsRollers;
-    private boolean feederJamRecoveryWasActive;
+    private boolean feederJamWarningWasActive;
+    private boolean feederManualUnjamWasActive;
     private final ScoringTelemetry scoringTelemetry =
         new ScoringTelemetry(drivetrain, turret, vision, shotDistanceTuning);
     private final ShotTuningControls shotTuningControls = new ShotTuningControls(turret);
@@ -163,7 +164,8 @@ public class RobotContainer {
         updateAutoScoreIntakeAssist();
         updateAutonomousIntakeRollers();
         feeder.updateControlAndTelemetry(publishMechanismTelemetry);
-        updateFeederJamRecoveryIntakeMove();
+        updateFeederJamWarningRumble();
+        updateManualUnjamIntakeMove();
         intake.updateControlAndTelemetry(publishMechanismTelemetry);
         if (publishBaseTelemetry) {
             rebuiltMatchStatePublisher.update();
@@ -312,7 +314,6 @@ public class RobotContainer {
         rightBumper
             .and(joystick.back().negate())
             .and(joystick.start().negate())
-            .and(rightTrigger.negate())
             .whileTrue(
                 Commands.startEnd(
                     intake::runRollersIn,
@@ -335,15 +336,12 @@ public class RobotContainer {
             .and(new Trigger(DriverStation::isTeleopEnabled))
             .and(backButton.negate())
             .and(startButton.negate())
-            .whileTrue(
-                Commands.startEnd(
-                    this::runReverseShotPath,
-                    this::stopReverseShotPath,
-                    turret,
-                    feeder,
-                    intake
-                )
-            );
+            .onTrue(Commands.runOnce(this::requestManualUnjam));
+        backupRightTrigger
+            .and(new Trigger(DriverStation::isTeleopEnabled))
+            .and(backupBackButton.negate())
+            .and(backupStartButton.negate())
+            .onTrue(Commands.runOnce(this::requestManualUnjam));
         // Hold Y to X-lock only the drivetrain; mechanisms keep their normal controls.
         joystick.y()
             .and(joystick.back().negate())
@@ -405,7 +403,6 @@ public class RobotContainer {
             .and(new Trigger(DriverStation::isTeleopEnabled))
             .and(backButton.negate())
             .and(startButton.negate())
-            .and(rightTrigger.negate())
             .whileTrue(scoreCommand);
         configureShiftRumbleFeedback();
 
@@ -455,9 +452,43 @@ public class RobotContainer {
         joystick.getHID().setRumble(RumbleType.kBothRumble, strength);
     }
 
+    private void setJamWarningRumble(double strength) {
+        joystick.getHID().setRumble(RumbleType.kBothRumble, strength);
+        backupController.getHID().setRumble(RumbleType.kBothRumble, strength);
+    }
+
+    private void updateFeederJamWarningRumble() {
+        boolean feederJamWarningActive = feeder.isJamWarningActive();
+        if (feederJamWarningActive) {
+            setJamWarningRumble(OperatorConstants.kJamWarningRumbleStrength);
+        } else if (feederJamWarningWasActive) {
+            setJamWarningRumble(0.0);
+        }
+
+        feederJamWarningWasActive = feederJamWarningActive;
+    }
+
+    private void updateManualUnjamIntakeMove() {
+        boolean feederManualUnjamActive = feeder.isUnjamActive();
+        if (!feederManualUnjamActive && feederManualUnjamWasActive) {
+            intake.endManualUnjamOutwardMove();
+        }
+
+        feederManualUnjamWasActive = feederManualUnjamActive;
+    }
+
+    private void requestManualUnjam() {
+        if (!feeder.requestUnjam()) {
+            return;
+        }
+
+        intake.endManualUnjamOutwardMove();
+        intake.beginManualUnjamOutwardMove();
+        feederManualUnjamWasActive = true;
+    }
+
     private boolean isAutoScoreRequested() {
         return leftBumper.getAsBoolean()
-            && !rightTrigger.getAsBoolean()
             && !backButton.getAsBoolean()
             && !startButton.getAsBoolean();
     }
@@ -467,17 +498,13 @@ public class RobotContainer {
     }
 
     private boolean isShotPrepCommandRequested() {
-        // Scoring and reverse controls take priority so a held warmup request
-        // can resume immediately after either handoff completes.
         return isShotPrepRequested()
-            && !isAutoScoreRequested()
-            && !isReverseShotPathRequested();
+            && !isAutoScoreRequested();
     }
 
     private boolean isPrimaryShotPrepRequested() {
         return leftTrigger.getAsBoolean()
             && !leftBumper.getAsBoolean()
-            && !rightTrigger.getAsBoolean()
             && !backButton.getAsBoolean()
             && !startButton.getAsBoolean();
     }
@@ -485,33 +512,13 @@ public class RobotContainer {
     private boolean isBackupShotPrepRequested() {
         return backupLeftTrigger.getAsBoolean()
             && !backupLeftBumper.getAsBoolean()
-            && !backupRightTrigger.getAsBoolean()
             && !backupBackButton.getAsBoolean()
             && !backupStartButton.getAsBoolean();
     }
 
-    private boolean isReverseShotPathRequested() {
-        return rightTrigger.getAsBoolean()
-            && !backButton.getAsBoolean()
-            && !startButton.getAsBoolean();
-    }
-
     private boolean isShootingControlRequested() {
         return isAutoScoreRequested()
-            || isShotPrepRequested()
-            || isReverseShotPathRequested();
-    }
-
-    private void runReverseShotPath() {
-        turret.reverseSerializer();
-        feeder.reverseAll();
-        intake.runRollersOut();
-    }
-
-    private void stopReverseShotPath() {
-        turret.stopSerializer();
-        feeder.stopAll();
-        intake.stopRollers();
+            || isShotPrepRequested();
     }
 
     private void stepTurretHeadingLeftFromPov() {
@@ -525,7 +532,6 @@ public class RobotContainer {
     private boolean isIntakeButtonRequested() {
         return DriverStation.isEnabled()
             && rightBumper.getAsBoolean()
-            && !rightTrigger.getAsBoolean()
             && !backButton.getAsBoolean()
             && !startButton.getAsBoolean();
     }
@@ -574,17 +580,6 @@ public class RobotContainer {
         if (AutonomousIntakeRollerPolicy.shouldRunRollers(DriverStation.isAutonomousEnabled())) {
             intake.runRollersIn();
         }
-    }
-
-    private void updateFeederJamRecoveryIntakeMove() {
-        boolean feederJamRecoveryActive = feeder.isJamRecoveryActive();
-        if (feederJamRecoveryActive && !feederJamRecoveryWasActive) {
-            intake.beginJamRecoveryOutwardMove();
-        } else if (!feederJamRecoveryActive && feederJamRecoveryWasActive) {
-            intake.endJamRecoveryOutwardMove();
-        }
-
-        feederJamRecoveryWasActive = feederJamRecoveryActive;
     }
 
     private void pointTurretAtIntendedTarget() {

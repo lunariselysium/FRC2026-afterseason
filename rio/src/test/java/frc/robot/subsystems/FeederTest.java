@@ -33,13 +33,17 @@ class FeederTest {
 
     @Test
     void highCurrentOrLowVelocityIndependentlyIndicateAJam() {
-        assertTrue(Feeder.isMotorJammed(0.95, 26.0, 20.0));
+        assertTrue(Feeder.isMotorJammed(
+            0.95,
+            FeederConstants.kJamCurrentThresholdAmps,
+            20.0
+        ));
         assertTrue(Feeder.isMotorJammed(0.95, 5.0, 0.5));
         assertFalse(Feeder.isMotorJammed(0.95, 5.0, 20.0));
     }
 
     @Test
-    void stoppedOrReversingMotorIsNotMonitoredForAutomaticJamRecovery() {
+    void stoppedOrReversingMotorIsNotMonitoredForJamWarning() {
         assertFalse(Feeder.isMotorJammed(0.0, 30.0, 0.0));
         assertFalse(Feeder.isMotorJammed(-0.95, 30.0, 0.0));
     }

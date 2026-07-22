@@ -6,49 +6,31 @@ package frc.robot.subsystems;
 
 import java.util.Arrays;
 
-final class FeederJamRecoveryController {
-    enum OutputMode {
-        NOMINAL,
-        REVERSE
-    }
-
+final class FeederJamMonitor {
     private static final double kTimeComparisonEpsilonSeconds = 1.0e-9;
     private static final int kMonitoredMotorCount = 4;
 
     private final double qualificationSeconds;
-    private final double reverseSeconds;
     private final double[] jamStartedAtSeconds = new double[kMonitoredMotorCount];
 
-    private boolean recoveryActive;
-    private double recoveryStartedAtSeconds;
+    private boolean jamWarningActive;
 
-    FeederJamRecoveryController(double qualificationSeconds, double reverseSeconds) {
+    FeederJamMonitor(double qualificationSeconds) {
         this.qualificationSeconds = qualificationSeconds;
-        this.reverseSeconds = reverseSeconds;
         clearJamTimers();
     }
 
-    OutputMode update(
+    boolean update(
         double timestampSeconds,
-        boolean recoveryAllowed,
+        boolean monitoringAllowed,
         boolean floorJammed,
         boolean handoffWheelJammed,
         boolean beltLeaderJammed,
         boolean beltFollowerJammed
     ) {
-        if (!recoveryAllowed) {
+        if (!monitoringAllowed) {
             reset();
-            return OutputMode.NOMINAL;
-        }
-
-        if (recoveryActive) {
-            if (hasElapsed(timestampSeconds, recoveryStartedAtSeconds, reverseSeconds)) {
-                recoveryActive = false;
-                clearJamTimers();
-                return OutputMode.NOMINAL;
-            }
-
-            return OutputMode.REVERSE;
+            return false;
         }
 
         boolean[] jammed = {
@@ -57,12 +39,14 @@ final class FeederJamRecoveryController {
             beltLeaderJammed,
             beltFollowerJammed
         };
+        boolean anyJamConditionActive = false;
         for (int motorIndex = 0; motorIndex < jammed.length; motorIndex++) {
             if (!jammed[motorIndex]) {
                 jamStartedAtSeconds[motorIndex] = Double.NaN;
                 continue;
             }
 
+            anyJamConditionActive = true;
             if (Double.isNaN(jamStartedAtSeconds[motorIndex])) {
                 jamStartedAtSeconds[motorIndex] = timestampSeconds;
                 continue;
@@ -73,23 +57,23 @@ final class FeederJamRecoveryController {
                 jamStartedAtSeconds[motorIndex],
                 qualificationSeconds
             )) {
-                recoveryActive = true;
-                recoveryStartedAtSeconds = timestampSeconds;
-                clearJamTimers();
-                return OutputMode.REVERSE;
+                jamWarningActive = true;
             }
         }
 
-        return OutputMode.NOMINAL;
+        if (!anyJamConditionActive) {
+            jamWarningActive = false;
+        }
+
+        return jamWarningActive;
     }
 
-    boolean isRecoveryActive() {
-        return recoveryActive;
+    boolean isJamWarningActive() {
+        return jamWarningActive;
     }
 
     void reset() {
-        recoveryActive = false;
-        recoveryStartedAtSeconds = 0.0;
+        jamWarningActive = false;
         clearJamTimers();
     }
 
